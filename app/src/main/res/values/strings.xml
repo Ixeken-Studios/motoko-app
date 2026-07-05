@@ -1,3 +1,302 @@
 <resources>
-    <string name="app_name">motoko</string>
+    <string name="app_name">Motoko</string>
+
+    <!-- Navigation & Headers -->
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="tab_history">History</string>
+    <string name="tab_subscriptions">Subscriptions</string>
+
+    <!-- Accessibility Descriptions -->
+    <string name="desc_privacy_global">Global privacy</string>
+    <string name="desc_settings">Settings</string>
+    <string name="desc_choose_account">Choose account</string>
+    <string name="desc_nav_tab">Navigation tab</string>
+    <string name="desc_add_transaction">Add transaction</string>
+    <string name="desc_back">Back</string>
+
+
+    <!-- Settings General -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_sec_general">General</string>
+    <string name="settings_sec_security">Security</string>
+    <string name="settings_sec_appearance">Customization</string>
+    <string name="settings_sec_about">About</string>
+
+    <!-- Settings General Items -->
+    <string name="settings_import_title">Import data</string>
+    <string name="settings_import_desc">Import expenses and income data</string>
+    <string name="settings_export_title">Export data</string>
+    <string name="settings_export_desc">Export all your data in a file</string>
+    <string name="settings_categories_title">Manage categories &amp; accounts</string>
+    <string name="settings_categories_desc">Delete or edit custom categories and accounts</string>
+
+    <!-- Settings Security Items -->
+    <string name="settings_hide_budget_title">Hide Budget card on home</string>
+    <string name="settings_hide_budget_desc">Remove the budget information on home for added privacy</string>
+    <string name="settings_app_lock_title">Activate app lock</string>
+    <string name="settings_app_lock_desc">Change the color palette</string>
+    <string name="settings_clear_data_title">Clear database</string>
+    <string name="settings_clear_data_desc">Permanently delete all your financial records and accounts</string>
+    <string name="settings_clear_data_confirm_title">Clear all data?</string>
+    <string name="settings_clear_data_confirm_message">This will permanently delete all transactions, subscriptions, wallets, and custom accounts. This action cannot be undone. Are you sure?</string>
+
+    <!-- Settings Appearance Items -->
+    <string name="settings_themes_title">Appearance</string>
+    <string name="settings_themes_desc">Change the color palette</string>
+    <string name="settings_font_title">Font style</string>
+    <string name="settings_font_desc">Change the main font</string>
+    <string name="settings_alignment_title">Nav bar alignment</string>
+    <string name="settings_alignment_desc">Change the nav bar alignment to the right or to the left</string>
+    <string name="alignment_left">Left</string>
+    <string name="alignment_center">Center</string>
+    <string name="alignment_right">Right</string>
+
+    <!-- Settings About Items -->
+    <string name="settings_motoko_title">Motoko</string>
+    <string name="settings_motoko_version">v 1.0</string>
+    <string name="settings_privacy_title">Privacy info</string>
+    <string name="settings_changelog_title">View changelog</string>
+    <string name="settings_changelog_body">Welcome to Motoko v1.0!\n\nThis is the initial release of Motoko, your personal finance manager designed to help you take control of your money.\n\n- Dashboard: Track your income, expenses, and balance at a glance. View your latest transactions and monitor your budget with ease.\n- History: Browse, search, and filter past transactions by time, category, and type.\n- Subscriptions: Keep track of your monthly and annual subscriptions with automatic billing period totals.\n- Categories: Organize your transactions by customizable categories with unique icons.\n- Wallets: Manage multiple wallets (Cash, Debit Card, Savings) to see where your money is stored.\n- Accounts: Separate your finances across different accounts (Personal, Work, Joint) with full transaction isolation.\n- Settings: Customize your experience with theme options, font styles, text size, app lock, and data import/export.\n- Privacy: Enable privacy mode to hide sensitive amounts, or lock the app behind biometric authentication.\n- Receipts: Attach receipt images to any transaction for easy record-keeping.\n\nMotoko is built by Ixeken Studios. All your data stays on your device — we don\'t track, we don\'t store, we don\'t know.</string>
+    <string name="settings_updates_title">Check for updates</string>
+    <string name="settings_update_start_title">Check update on start</string>
+    <string name="settings_update_start_desc">Automatically check for update when the app starts</string>
+    <string name="settings_repo_title">View repository</string>
+    <string name="settings_created_by_title">Created by Ixeken Studios</string>
+    <string name="settings_created_by_desc">Made in Mexico</string>
+    <string name="dialog_close">Close</string>
+    <string name="settings_privacy_dialog_title">Privacy</string>
+    <string name="settings_privacy_dialog_body">At Ixeken Studios, your privacy is our priority.\n\nAll your financial data, transactions, accounts, subscriptions, and receipts are stored exclusively on your device. Ixeken Studios has no access to your data, no way to know how you use the app, and no way to know if you even use the app at all.\n\nThe app does not send any personal or financial data over the internet. There is no analytics, crash reporting, or telemetry. In fact, checking for updates is the only feature in the entire app that uses internet access, and it only runs if you explicitly trigger it or enable automatic checks on startup.\n\nOptionally, if you enable the \"Check for updates\" feature, the app will make a single request to GitHub Releases to check your current version against the latest available version. No personal information is sent — only a public version identifier. This feature is entirely optional and disabled by default.\n\nWhen you export your data, the exported file is in your full control. You are solely responsible for handling, storing, and sharing that exported data.</string>
+
+    <!-- Dashboard Elements -->
+    <string name="dashboard_today">Today,</string>
+    <string name="dashboard_date">18 June, 2026</string>
+    <string name="dashboard_expenses">Expenses: %1$s</string>
+    <string name="dashboard_income">Income: %1$s</string>
+    <string name="dashboard_filter_day">Day</string>
+    <string name="dashboard_budget">Budget</string>
+    <string name="dashboard_budget_total">Total</string>
+    <string name="dashboard_budget_balance">Balance</string>
+    <string name="dashboard_budget_card_name">Motoko</string>
+    <string name="dashboard_latest">Latest</string>
+    
+    <!-- Categories & Items -->
+    <string name="cat_food">Food</string>
+    <string name="cat_house">House</string>
+    <string name="cat_entertainment">Entertainment</string>
+    <string name="cat_transport">Transport</string>
+    <string name="cat_income">Income</string>
+    <string name="item_ice_cream">Ice Cream</string>
+    <string name="item_xbox_sale">Xbox sale</string>
+
+    <!-- History Screen -->
+    <string name="history_search_placeholder">Search</string>
+    <string name="history_filter_time">Time</string>
+    <string name="history_filter_category">Category</string>
+    <string name="history_filter_type">Type</string>
+    <string name="history_filter_type_all">All</string>
+    <string name="history_filter_type_income">Income</string>
+    <string name="history_filter_type_expense">Expense</string>
+    <string name="history_filter_summary">All time | All</string>
+    <string name="history_group_today">Today, 18 June, 2026.</string>
+    <string name="history_group_yesterday">Yesterday 17 June, 2026.</string>
+    <string name="desc_history_search">Search transactions</string>
+    <string name="desc_history_clear">Clear filters</string>
+    <string name="desc_history_filter_time">Filter by time</string>
+    <string name="desc_history_filter_category">Filter by category</string>
+    <string name="desc_history_filter_type">Filter by type</string>
+
+    <!-- History items - Today -->
+    <string name="history_item_internet">Internet</string>
+    <string name="history_item_cinema">Cinema tickets</string>
+    <string name="history_item_metro">Metro</string>
+
+    <!-- History items - Yesterday -->
+    <string name="history_item_rp_league">RP League</string>
+    <string name="history_item_youtube_music">Youtube music</string>
+    <string name="history_item_smartphone">Smartphone</string>
+
+    <!-- Subscriptions Screen -->
+    <string name="sub_title">Subscriptions</string>
+    <string name="sub_monthly_expense">Monthly expense</string>
+    <string name="sub_annual_expense">Annual expense</string>
+    <string name="sub_billing_period">Billing period</string>
+    <string name="sub_status_label">Monthly</string>
+    <string name="sub_name_google_premium">Google premium</string>
+    <string name="sub_name_mullvad_vpn">Mullvad VPN</string>
+    <string name="sub_name_maya_autodesk">Maya autodesk</string>
+    <string name="sub_name_figma">Figma</string>
+    <string name="sub_name_discord_nitro">Discord nitro</string>
+    <string name="sub_date_standard">24/06/2026</string>
+
+    <!-- Categories for history items -->
+    <string name="cat_gaming">Gaming</string>
+    <string name="cat_subscriptions">Subscriptions</string>
+    <string name="cat_shopping">Shopping</string>
+    <!-- New Item Screen -->
+    <string name="new_item_title">New item</string>
+    <string name="new_item_tab_income">Income</string>
+    <string name="new_item_tab_expense">Expense</string>
+    <string name="new_item_tab_subscription">Subscription</string>
+    <string name="new_item_label_name">Name</string>
+    <string name="new_item_placeholder_name">Name</string>
+    <string name="new_item_label_amount">Amount</string>
+    <string name="new_item_placeholder_amount">$ - - -</string>
+    <string name="new_item_label_wallet">Wallet</string>
+    <string name="new_item_placeholder_wallet">Name</string>
+    <string name="new_item_label_date">Date</string>
+    <string name="new_item_placeholder_date">Account</string>
+    <string name="new_item_label_note">Note</string>
+    <string name="new_item_placeholder_note">Describe</string>
+    <string name="new_item_label_icon">Icon</string>
+    <string name="new_item_placeholder_icon">Select icon</string>
+    <string name="new_item_label_account">Account</string>
+    <string name="new_item_placeholder_account">Account</string>
+    <string name="new_item_label_category">Category</string>
+    <string name="new_item_placeholder_category">Name</string>
+    <string name="new_item_label_receipt">Receipt (Optional)</string>
+    <string name="new_item_placeholder_receipt">File name</string>
+    <string name="new_item_label_billing_period">Billing period</string>
+    <string name="new_item_placeholder_billing_period">Period</string>
+    <string name="new_item_btn_save">Save</string>
+    <string name="billing_period_monthly">Monthly</string>
+    <string name="billing_period_annual">Annual</string>
+    <string name="btn_edit">Edit</string>
+    <string name="btn_delete">Delete</string>
+    <string name="edit_item_title">Edit item</string>
+    <string name="delete_confirm_message">This item will be permanently deleted. Are you sure?</string>
+    <string name="delete_confirm_dont_show">Don\'t show this again</string>
+    <string name="btn_no">No</string>
+    <string name="btn_yes">Yes</string>
+    <string name="themes_title">Themes</string>
+    <string name="theme_mode_title">Theme mode</string>
+    <string name="theme_mode_desc">Pick between selected themes</string>
+    <string name="theme_mode_option_system">System default</string>
+    <string name="theme_mode_option_light">Light</string>
+    <string name="theme_mode_option_dark">Dark</string>
+    <string name="theme_mode_option_olive">Dark Olive</string>
+    <string name="toggle_colored_elements_title">Toggle colored elements</string>
+    <string name="toggle_colored_elements_desc">In elements like the switch and some labels</string>
+
+    <!-- Selector Bottom Sheet -->
+    <string name="sub_bottom_sheet_title_income">Income</string>
+    <string name="sub_bottom_sheet_new_wallet">New wallet</string>
+    <string name="sub_bottom_sheet_option_cash">Cash</string>
+    <string name="sub_bottom_sheet_option_debit">Debit Card</string>
+    <string name="sub_bottom_sheet_option_savings">Savings</string>
+    <string name="sub_bottom_sheet_account_personal">Personal</string>
+    <string name="sub_bottom_sheet_new_account">New account</string>
+    <string name="sub_bottom_sheet_account_work">Work</string>
+    <string name="sub_bottom_sheet_account_joint">Joint</string>
+    <string name="search_icon_placeholder">Search icon</string>
+    <string name="sub_bottom_sheet_new_category">New category</string>
+    <string name="sub_bottom_sheet_cat_services">Services</string>
+    <string name="sub_bottom_sheet_icon_folder">Folder</string>
+    <string name="sub_bottom_sheet_icon_tag">Tag</string>
+    <string name="btn_cancel">Cancel</string>
+
+    <!-- Manage Screen -->
+    <string name="manage_title">Manage</string>
+    <string name="manage_tab_category">Category</string>
+    <string name="manage_tab_wallet">Wallet</string>
+    <string name="manage_tab_account">Account</string>
+    <string name="manage_mode_new">New</string>
+    <string name="manage_mode_edit">Edit</string>
+    <string name="manage_mode_delete">Delete</string>
+    <string name="manage_modal_edit_category">Edit category</string>
+    <string name="manage_modal_edit_wallet">Edit wallet</string>
+    <string name="manage_modal_edit_account">Edit account</string>
+    <string name="manage_modal_new_category">New category</string>
+    <string name="manage_modal_new_wallet">New wallet</string>
+    <string name="manage_modal_new_account">New account</string>
+    <string name="manage_placeholder_select_icon">Select icon</string>
+    <string name="manage_btn_save">Save</string>
+    <string name="manage_btn_cancel">Cancel</string>
+    <string name="manage_delete_confirmation_title">Delete confirmation</string>
+    <string name="manage_delete_warning_wallet">This wallet has %d associated record(s). Deleting it will also permanently delete all those records. Are you sure?</string>
+    <string name="manage_delete_warning_account">This account has %d associated record(s). Deleting it will also permanently delete all those records. Are you sure?</string>
+
+    <!-- Dialog Filter Options -->
+    <string name="dashboard_filter_week">Week</string>
+    <string name="dashboard_filter_month">Month</string>
+    <string name="dashboard_filter_year">Year</string>
+    <string name="history_filter_time_all">All time</string>
+    <string name="history_filter_time_today">Today</string>
+    <string name="history_filter_time_yesterday">Yesterday</string>
+    <string name="history_filter_time_week">This week</string>
+    <string name="history_filter_time_month">This month</string>
+    <string name="history_filter_time_year">This year</string>
+    <string name="history_filter_category_all">All categories</string>
+    <string name="sub_billing_all">All</string>
+
+    <!-- Empty States -->
+    <string name="dashboard_no_categories">No expenses or income registered yet</string>
+    <string name="dashboard_no_transactions">No transactions found for this account</string>
+    <string name="history_no_transactions">No transactions found matching your filters</string>
+    <string name="subscriptions_no_subscriptions">No active subscriptions found</string>
+
+    <!-- Swipe to delete / Undo -->
+    <string name="swipe_delete_confirm_title">Delete transaction?</string>
+    <string name="swipe_delete_confirm_message">This transaction will be permanently deleted.</string>
+    <string name="snackbar_transaction_deleted">Transaction deleted</string>
+    <string name="snackbar_undo">Undo</string>
+    <string name="settings_swipe_delete_title">Swipe to delete</string>
+    <string name="settings_swipe_delete_desc">Swipe left on a transaction in History to delete it</string>
+
+    <!-- Text Size Settings -->
+    <string name="settings_text_size_title">Text size</string>
+    <string name="settings_text_size_desc">Adjust the font size throughout the app</string>
+    <string name="text_size_0">Very small</string>
+    <string name="text_size_1">Small</string>
+    <string name="text_size_2">Default</string>
+    <string name="text_size_3">Large</string>
+    <string name="text_size_4">Very large</string>
+
+    <!-- Currency Settings -->
+    <string name="settings_currency_title">Currency symbol</string>
+    <string name="settings_currency_desc">Change the currency symbol used across the app</string>
+    <string name="currency_dollar">Dollar / Peso ($)</string>
+    <string name="currency_euro">Euro (€)</string>
+    <string name="currency_pound">Pound (£)</string>
+    <string name="currency_yen">Yen / Yuan (¥)</string>
+    <string name="currency_rupee">Rupee (₹)</string>
+    <string name="currency_won">Won (₩)</string>
+    <string name="currency_real">Brazilian Real (R$)</string>
+    <string name="currency_ruble">Russian Ruble (₽)</string>
+    <string name="currency_lira">Turkish Lira (₺)</string>
+    <string name="currency_corona">Swedish/Norwegian Krona (kr)</string>
+    <string name="currency_dong">Vietnamese Dong (₫)</string>
+    <string name="currency_naira">Nigerian Naira (₦)</string>
+    <string name="currency_franc">Swiss Franc (CHF)</string>
+
+    <!-- Animation Settings -->
+    <string name="settings_animations_title">System animations</string>
+    <string name="settings_animations_desc">Enable visual transitions and micro-interactions</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_btn_next">Next</string>
+    <string name="onboarding_btn_start">Start</string>
+    <string name="onboarding_page1_title">Control your Movements</string>
+    <string name="onboarding_page1_desc">Record your income and expenses instantly in a unified history. Classify your transactions by categories and see where your money goes day by day.</string>
+    <string name="onboarding_page2_title">Structure your Funds</string>
+    <string name="onboarding_page2_desc">Separate your digital money from physical cash by managing multiple accounts and wallets. Set monthly budgets by category to avoid unnecessary spending.</string>
+    <string name="onboarding_page3_title">Subscriptions under Control</string>
+    <string name="onboarding_page3_desc">No more surprises in your statements. Register your monthly or annual services, keep track of fixed expenses and receive alerts before each billing date.</string>
+    <string name="onboarding_page4_title">Your Data is Yours</string>
+    <string name="onboarding_page4_desc">Your finances never leave your device. Motoko is 100% local and gives you absolute freedom to import your current records or export complete backups at any time.</string>
+    <string name="settings_repeat_onboarding">Repeat welcome tour</string>
+    <string name="settings_repeat_onboarding_desc">View the onboarding walkthrough again</string>
+
+    <!-- Backup and Restore -->
+    <string name="backup_export_success">Backup exported successfully</string>
+    <string name="backup_export_error">Error exporting backup</string>
+    <string name="backup_import_success">Backup imported successfully</string>
+    <string name="backup_invalid_file_error">Error: The selected file is unsupported or corrupted</string>
+    <string name="settings_biometric_no_security">No secure lock method (PIN, pattern, password or biometrics) configured on this device</string>
+    <string name="settings_changes_saved">Changes saved</string>
+    <string name="update_already_latest">You are already on the latest version</string>
+    <string name="update_check_failed">Failed to check for updates. Please try again later</string>
+    <string name="update_check_network_error">Network error. Please check your internet connection</string>
+    <string name="settings_update_dialog_title">Update Available</string>
+    <string name="settings_update_dialog_body">A new version of Motoko (%1$s) is available. Would you like to view the release page to download it?</string>
+    <string name="settings_update_dialog_download">Download</string>
 </resources>

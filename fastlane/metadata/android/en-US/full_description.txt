@@ -1,0 +1,12 @@
+Motoko is an open-source, local-first personal finance assistant designed with total data privacy in mind. Every single record, receipt image, account details, and settings parameter stays strictly encrypted on your Android device—guaranteeing no cloud leaks, trackers, or unwanted telemetry.
+
+Key Features:
+
+• Interactive Dashboard: View your net income, total expenses, and general balances instantly. Includes a dynamic budget card to monitor monthly limits at a glance.
+• Comprehensive Ledger: Search and filter transactions by timeframe, type, or custom categories.
+• Subscription Tracker: Monitor recurring monthly and annual payments, with automatic cost estimates for upcoming billing cycles.
+• Categories & Wallet Manager: Create custom wallets and categories personalized with a curated library of over 30 Lucide icons.
+• Custom Profiles: Isolate and manage your cash flow across different accounts (e.g., Personal, Joint, Work).
+• Robust Security: Safeguard your ledger with optional biometric fingerprint or PIN lock (App Lock).
+• Customization Options: Select from various themes, font faces, navigation dock alignments, and font sizes (pre-set to small by default).
+• Local Backups: Export and import complete backups via JSON files with full backward compatibility.

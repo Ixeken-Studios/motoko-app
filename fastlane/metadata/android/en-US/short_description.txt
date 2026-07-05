@@ -1,0 +1,1 @@
+Private, local-first personal finance manager to track expenses & subscriptions.
