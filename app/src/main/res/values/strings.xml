@@ -18,30 +18,31 @@
     <!-- Settings General -->
     <string name="settings_title">Settings</string>
     <string name="settings_sec_general">General</string>
-    <string name="settings_sec_security">Security</string>
+    <string name="settings_sec_security">Security &amp; Privacy</string>
     <string name="settings_sec_appearance">Customization</string>
     <string name="settings_sec_about">About</string>
 
     <!-- Settings General Items -->
     <string name="settings_import_title">Import data</string>
-    <string name="settings_import_desc">Import expenses and income data</string>
+    <string name="settings_import_desc">Bring in your transactions from a backup file</string>
     <string name="settings_export_title">Export data</string>
-    <string name="settings_export_desc">Export all your data in a file</string>
+    <string name="settings_export_desc">Save a copy of all your financial records</string>
     <string name="settings_categories_title">Manage categories &amp; accounts</string>
-    <string name="settings_categories_desc">Delete or edit custom categories and accounts</string>
+    <string name="settings_categories_desc">Delete or edit custom categories, accounts and wallets</string>
 
     <!-- Settings Security Items -->
     <string name="settings_hide_budget_title">Hide Budget card on home</string>
-    <string name="settings_hide_budget_desc">Remove the budget information on home for added privacy</string>
+    <string name="settings_hide_budget_desc">Keep your budget overview private on the main screen</string>
     <string name="settings_app_lock_title">Activate app lock</string>
-    <string name="settings_app_lock_desc">Change the color palette</string>
+    <string name="settings_app_lock_desc">Require PIN or Biometrics every time you launch Motoko</string>
     <string name="settings_clear_data_title">Clear database</string>
-    <string name="settings_clear_data_desc">Permanently delete all your financial records and accounts</string>
+    <string name="settings_clear_data_desc">Wipe all records, wallets, and start completely fresh</string>
     <string name="settings_clear_data_confirm_title">Clear all data?</string>
     <string name="settings_clear_data_confirm_message">This will permanently delete all transactions, subscriptions, wallets, and custom accounts. This action cannot be undone. Are you sure?</string>
 
     <!-- Settings Appearance Items -->
     <string name="settings_themes_title">Appearance</string>
+    <string name="themes_sec_visuals">Visual details</string>
     <string name="settings_themes_desc">Change the color palette</string>
     <string name="settings_font_title">Font style</string>
     <string name="settings_font_desc">Change the main font</string>
@@ -53,10 +54,10 @@
 
     <!-- Settings About Items -->
     <string name="settings_motoko_title">Motoko</string>
-    <string name="settings_motoko_version">v 1.0</string>
+    <string name="settings_motoko_version">v 1.1</string>
     <string name="settings_privacy_title">Privacy info</string>
     <string name="settings_changelog_title">View changelog</string>
-    <string name="settings_changelog_body">Welcome to Motoko v1.0!\n\nThis is the initial release of Motoko, your personal finance manager designed to help you take control of your money.\n\n- Dashboard: Track your income, expenses, and balance at a glance. View your latest transactions and monitor your budget with ease.\n- History: Browse, search, and filter past transactions by time, category, and type.\n- Subscriptions: Keep track of your monthly and annual subscriptions with automatic billing period totals.\n- Categories: Organize your transactions by customizable categories with unique icons.\n- Wallets: Manage multiple wallets (Cash, Debit Card, Savings) to see where your money is stored.\n- Accounts: Separate your finances across different accounts (Personal, Work, Joint) with full transaction isolation.\n- Settings: Customize your experience with theme options, font styles, text size, app lock, and data import/export.\n- Privacy: Enable privacy mode to hide sensitive amounts, or lock the app behind biometric authentication.\n- Receipts: Attach receipt images to any transaction for easy record-keeping.\n\nMotoko is built by Ixeken Studios. All your data stays on your device — we don\'t track, we don\'t store, we don\'t know.</string>
+    <string name="settings_changelog_body">Motoko v1.1\n\n- Redesigned UI &amp; UX: Unified bottom sheet headers, high-contrast dashed input fields, and updated card styles.\n- Font &amp; Accessibility Support: Adaptive layout scaling for large fonts, text truncation, and multiline form field support.\n- Customization &amp; Navigation: Alignment options for floating action menus, navigation bar placement, and toggleable colored elements.\n- Fixes &amp; Smooth Animations: Opaque transaction card backgrounds during swipe-to-delete with automatic reset when cancelling deletion.</string>
     <string name="settings_updates_title">Check for updates</string>
     <string name="settings_update_start_title">Check update on start</string>
     <string name="settings_update_start_desc">Automatically check for update when the app starts</string>
@@ -134,6 +135,9 @@
     <string name="cat_shopping">Shopping</string>
     <!-- New Item Screen -->
     <string name="new_item_title">New item</string>
+    <string name="new_item_title_income">New income</string>
+    <string name="new_item_title_expense">New expense</string>
+    <string name="new_item_title_subscription">New subscription</string>
     <string name="new_item_tab_income">Income</string>
     <string name="new_item_tab_expense">Expense</string>
     <string name="new_item_tab_subscription">Subscription</string>
@@ -146,7 +150,7 @@
     <string name="new_item_label_date">Date</string>
     <string name="new_item_placeholder_date">Account</string>
     <string name="new_item_label_note">Note</string>
-    <string name="new_item_placeholder_note">Describe</string>
+    <string name="new_item_placeholder_note">What was this for?</string>
     <string name="new_item_label_icon">Icon</string>
     <string name="new_item_placeholder_icon">Select icon</string>
     <string name="new_item_label_account">Account</string>
@@ -163,8 +167,11 @@
     <string name="btn_edit">Edit</string>
     <string name="btn_delete">Delete</string>
     <string name="edit_item_title">Edit item</string>
+    <string name="edit_item_title_income">Edit income</string>
+    <string name="edit_item_title_expense">Edit expense</string>
+    <string name="edit_item_title_subscription">Edit subscription</string>
     <string name="delete_confirm_message">This item will be permanently deleted. Are you sure?</string>
-    <string name="delete_confirm_dont_show">Don\'t show this again</string>
+    <string name="delete_confirm_dont_show">Don\'t ask me again</string>
     <string name="btn_no">No</string>
     <string name="btn_yes">Yes</string>
     <string name="themes_title">Themes</string>
@@ -201,6 +208,7 @@
     <string name="manage_tab_account">Account</string>
     <string name="manage_mode_new">New</string>
     <string name="manage_mode_edit">Edit</string>
+    <string name="manage_mode_editing">Editing</string>
     <string name="manage_mode_delete">Delete</string>
     <string name="manage_modal_edit_category">Edit category</string>
     <string name="manage_modal_edit_wallet">Edit wallet</string>
@@ -214,6 +222,7 @@
     <string name="manage_delete_confirmation_title">Delete confirmation</string>
     <string name="manage_delete_warning_wallet">This wallet has %d associated record(s). Deleting it will also permanently delete all those records. Are you sure?</string>
     <string name="manage_delete_warning_account">This account has %d associated record(s). Deleting it will also permanently delete all those records. Are you sure?</string>
+    <string name="manage_selected_count">%d Selected</string>
 
     <!-- Dialog Filter Options -->
     <string name="dashboard_filter_week">Week</string>
@@ -229,10 +238,10 @@
     <string name="sub_billing_all">All</string>
 
     <!-- Empty States -->
-    <string name="dashboard_no_categories">No expenses or income registered yet</string>
-    <string name="dashboard_no_transactions">No transactions found for this account</string>
-    <string name="history_no_transactions">No transactions found matching your filters</string>
-    <string name="subscriptions_no_subscriptions">No active subscriptions found</string>
+    <string name="dashboard_no_categories">Everything clean! No money in or out yet.</string>
+    <string name="dashboard_no_transactions">Nothing moved in this account yet</string>
+    <string name="history_no_transactions">Nothing under these filters! Did you search in another timeline?</string>
+    <string name="subscriptions_no_subscriptions">Zero active subs! Your wallet is breathing a sigh of relief.</string>
 
     <!-- Swipe to delete / Undo -->
     <string name="swipe_delete_confirm_title">Delete transaction?</string>
@@ -240,7 +249,7 @@
     <string name="snackbar_transaction_deleted">Transaction deleted</string>
     <string name="snackbar_undo">Undo</string>
     <string name="settings_swipe_delete_title">Swipe to delete</string>
-    <string name="settings_swipe_delete_desc">Swipe left on a transaction in History to delete it</string>
+    <string name="settings_swipe_delete_desc">Quickly swipe any item left in History to delete</string>
 
     <!-- Text Size Settings -->
     <string name="settings_text_size_title">Text size</string>
@@ -295,8 +304,25 @@
     <string name="settings_changes_saved">Changes saved</string>
     <string name="update_already_latest">You are already on the latest version</string>
     <string name="update_check_failed">Failed to check for updates. Please try again later</string>
-    <string name="update_check_network_error">Network error. Please check your internet connection</string>
+    <string name="update_check_network_error">Couldn\'t connect. Give your internet a quick check.</string>
     <string name="settings_update_dialog_title">Update Available</string>
     <string name="settings_update_dialog_body">A new version of Motoko (%1$s) is available. Would you like to view the release page to download it?</string>
     <string name="settings_update_dialog_download">Download</string>
+
+    <!-- GitHub Auto-Updates -->
+    <string name="settings_dialog_internet_confirm_title">Internet Access Required</string>
+    <string name="settings_dialog_internet_confirm_desc">Motoko will connect to GitHub API to check for updates. No personal or financial data will be transmitted. Do you wish to proceed?</string>
+    <string name="settings_dialog_internet_btn_proceed">Check Updates</string>
+    <string name="settings_dialog_btn_cancel">Cancel</string>
+    <string name="update_status_checking">Checking for updates...</string>
+    <string name="update_status_up_to_date_title">App is Up to Date</string>
+    <string name="update_status_up_to_date_desc">You\'re running the freshest, newest Motoko build.</string>
+    <string name="update_status_new_version_title">New Version Available!</string>
+    <string name="update_changelog_header">What\'s new:</string>
+    <string name="update_btn_download_apk">Download APK</string>
+    <string name="update_status_error_title">Connection Failed</string>
+    <string name="update_status_error_desc">Unable to connect to GitHub. Please check your internet connection and try again.</string>
+    <string name="update_btn_retry">Retry</string>
+    <string name="update_status_future_version_title">Time Traveler?</string>
+    <string name="update_status_future_version_desc">It seems you are running a version newer than the latest official release on GitHub. Did you build a time machine?</string>
 </resources>

@@ -120,7 +120,7 @@ class MainActivity : FragmentActivity() {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 LaunchedEffect(state.checkUpdateOnStart) {
                     if (state.checkUpdateOnStart) {
-                        mainViewModel.checkForUpdates(context = context, manual = false)
+                        mainViewModel.checkUpdatesOnStartup(context = context)
                     }
                 }
 

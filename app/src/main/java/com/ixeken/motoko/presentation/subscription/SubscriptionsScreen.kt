@@ -23,6 +23,12 @@ import com.composables.icons.lucide.R
 import com.ixeken.motoko.R as AppR
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ixeken.motoko.ui.theme.LocalMotokoColors
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import com.ixeken.motoko.ui.theme.LocalAnimationsEnabled
+import com.ixeken.motoko.ui.theme.MotokoAnimation
 
 data class SubscriptionItem(
     val nameRes: Int = 0,
@@ -43,6 +49,7 @@ fun SubscriptionsScreen(
     isPrivacyEnabled: Boolean,
     currencySymbol: String,
     billingFilter: String = "",
+    walletsList: List<String> = emptyList(),
     onTransactionClick: (id: Long, name: String, amount: String, type: com.ixeken.motoko.presentation.newitem.ItemType, wallet: String, category: String, date: String, note: String, account: String, iconName: String, receiptPath: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -130,6 +137,8 @@ fun SubscriptionsScreen(
                                 sub = sub,
                                 isPrivacyEnabled = isPrivacyEnabled,
                                 currencySymbol = currencySymbol,
+                                walletsList = walletsList,
+                                index = index,
                                 onTransactionClick = onTransactionClick
                             )
 
@@ -163,21 +172,36 @@ private fun SubscriptionRow(
     sub: SubscriptionItem,
     isPrivacyEnabled: Boolean,
     currencySymbol: String,
+    walletsList: List<String> = emptyList(),
+    index: Int = 0,
     onTransactionClick: (id: Long, name: String, amount: String, type: com.ixeken.motoko.presentation.newitem.ItemType, wallet: String, category: String, date: String, note: String, account: String, iconName: String, receiptPath: String) -> Unit
 ) {
+    val animState = remember(sub.domainSubscription?.id ?: sub.nameStr ?: sub.nameRes) { Animatable(0f) }
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val animSpec = MotokoAnimation.screenSpec<Float>()
+    LaunchedEffect(sub.domainSubscription?.id ?: sub.nameStr ?: sub.nameRes) {
+        if (animationsEnabled) {
+            kotlinx.coroutines.delay(index * 40L)
+        }
+        animState.animateTo(
+            targetValue = 1f,
+            animationSpec = animSpec
+        )
+    }
+
     val amountText = if (isPrivacyEnabled) "• • •" else "$currencySymbol ${sub.amount}"
     val context = androidx.compose.ui.platform.LocalContext.current
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animState.value
+                translationY = (1f - animState.value) * 40f
+            }
             .clickable {
                 val resolvedName = sub.nameStr ?: context.getString(sub.nameRes)
-                val resolvedWallet = when (sub.domainSubscription?.wallet) {
-                    com.ixeken.motoko.data.local.WalletType.CASH -> "Cash"
-                    com.ixeken.motoko.data.local.WalletType.SAVINGS -> "Savings"
-                    else -> "Debit Card"
-                }
+                val resolvedWallet = com.ixeken.motoko.data.local.resolveWalletName(sub.domainSubscription?.wallet, walletsList, context)
                 val resolvedAccount = sub.domainSubscription?.accountId?.toString() ?: "Personal"
                 val billingPeriodStr = when (sub.domainSubscription?.billingPeriod) {
                     com.ixeken.motoko.data.local.BillingPeriod.ANNUAL -> "Annual"

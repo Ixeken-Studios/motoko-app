@@ -1,6 +1,15 @@
 package com.ixeken.motoko.presentation.main
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -9,10 +18,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +44,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,7 +76,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +107,9 @@ import com.ixeken.motoko.presentation.settings.SettingsScreen
 import com.ixeken.motoko.presentation.settings.ManageViewModel
 import com.ixeken.motoko.presentation.subscription.SubscriptionsScreen
 import com.ixeken.motoko.presentation.subscription.SubscriptionsViewModel
+import com.ixeken.motoko.presentation.responsiveWidth
+import com.ixeken.motoko.presentation.isWideScreen
+import com.ixeken.motoko.ui.theme.bounceClick
 import com.ixeken.motoko.presentation.newitem.NewItemScreen
 import com.ixeken.motoko.presentation.newitem.NewItemViewModel
 import com.ixeken.motoko.presentation.newitem.ItemType
@@ -123,6 +142,7 @@ fun MainScreen(
     val dashboardState by dashboardViewModel.uiState.collectAsStateWithLifecycle()
     val dashboardViewMode by dashboardViewModel.viewMode.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val density = LocalDensity.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
@@ -133,6 +153,7 @@ fun MainScreen(
     val historyCategoryFilter by historyViewModel.categoryFilter.collectAsStateWithLifecycle()
     var subscriptionsBillingFilter by remember { mutableStateOf("") }
     var isHeaderMinimized by remember { mutableStateOf(false) }
+    var isFabMenuExpanded by remember { mutableStateOf(false) }
 
     var showDetailSheet by remember { mutableStateOf(false) }
     var detailId by remember { mutableStateOf(0L) }
@@ -168,12 +189,25 @@ fun MainScreen(
         }
     }
 
-    BackHandler(enabled = showSettings || showNewItem || state.currentTab != MotokoTab.DASHBOARD) {
+    BackHandler(enabled = showSettings || showNewItem || isFabMenuExpanded || state.currentTab != MotokoTab.DASHBOARD) {
         when {
             showSettings -> showSettings = false
-            showNewItem -> showNewItem = false
+            showNewItem -> {
+                newItemViewModel.resetForm()
+                showNewItem = false
+            }
+            isFabMenuExpanded -> isFabMenuExpanded = false
             state.currentTab != MotokoTab.DASHBOARD -> viewModel.selectTab(MotokoTab.DASHBOARD)
         }
+    }
+
+    val overlayAnimSpec = MotokoAnimation.screenSpec<androidx.compose.ui.unit.IntOffset>()
+    val overlayFadeSpec = MotokoAnimation.screenSpec<Float>()
+
+    val currentOverlayMode = when {
+        showSettings -> 1 // Settings
+        showNewItem -> 2  // New Item
+        else -> 0         // Main Tabs
     }
 
     Box(
@@ -181,22 +215,67 @@ fun MainScreen(
             .fillMaxSize()
             .background(LocalMotokoColors.current.primaryLight)
     ) {
-        if (showSettings) {
-            SettingsScreen(
-                viewModel = viewModel,
-                manageViewModel = manageViewModel,
-                onBackClick = { showSettings = false },
-                onRepeatOnboarding = onRepeatOnboarding
-            )
-        } else if (showNewItem) {
-            NewItemScreen(
-                viewModel = newItemViewModel,
-                currencySymbol = state.currencySymbol,
-                onBackClick = { showNewItem = false }
-            )
-        } else {
-            // CAPA 1: CABECERA DINÁMICA Y CONTENIDO SCROLLABLE
-            Column(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = currentOverlayMode,
+            transitionSpec = {
+                if (targetState != 0) {
+                    // Abrir (Settings o NewItem): de derecha a izquierda
+                    slideInHorizontally(
+                        animationSpec = overlayAnimSpec,
+                        initialOffsetX = { fullWidth -> fullWidth }
+                    ).togetherWith(
+                        slideOutHorizontally(
+                            animationSpec = overlayAnimSpec,
+                            targetOffsetX = { fullWidth -> -fullWidth / 3 }
+                        )
+                    ).apply {
+                        targetContentZIndex = 1f
+                    }
+                } else {
+                    // Cerrar (Regresar a Tabs): de izquierda a derecha
+                    slideInHorizontally(
+                        animationSpec = overlayAnimSpec,
+                        initialOffsetX = { fullWidth -> -fullWidth / 3 }
+                    ).togetherWith(
+                        slideOutHorizontally(
+                            animationSpec = overlayAnimSpec,
+                            targetOffsetX = { fullWidth -> fullWidth }
+                        )
+                    ).apply {
+                        targetContentZIndex = 0f
+                    }
+                }
+            },
+            label = "overlayTransition"
+        ) { mode ->
+            when (mode) {
+                1 -> SettingsScreen(
+                    viewModel = viewModel,
+                    manageViewModel = manageViewModel,
+                    onBackClick = { showSettings = false },
+                    onRepeatOnboarding = onRepeatOnboarding
+                )
+                2 -> NewItemScreen(
+                    viewModel = newItemViewModel,
+                    currencySymbol = state.currencySymbol,
+                    onBackClick = {
+                        newItemViewModel.resetForm()
+                        showNewItem = false
+                    }
+                )
+                else -> {
+                    // CAPA 1: CABECERA DINÁMICA Y CONTENIDO SCROLLABLE
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LocalMotokoColors.current.primaryLight),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .responsiveWidth(840.dp)
+                ) {
                 
                 // Cabecera oscura con bordes inferiores redondeados
                 Surface(
@@ -355,136 +434,285 @@ fun MainScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                when (state.currentTab) {
-                    MotokoTab.DASHBOARD -> DashboardScreen(
-                        viewModel = dashboardViewModel,
-                        isPrivacyEnabled = state.isPrivacyEnabled,
-                        hideBudgetCard = state.hideBudgetCard,
-                        coloredElementsEnabled = state.coloredElementsEnabled,
-                        currencySymbol = state.currencySymbol,
-                        walletsList = state.wallets,
-                        onTransactionClick = onTransactionClick
-                    )
-                    MotokoTab.HISTORY -> HistoryScreen(
-                        viewModel = historyViewModel,
-                        isPrivacyEnabled = state.isPrivacyEnabled,
-                        searchQuery = historySearchQuery,
-                        coloredElementsEnabled = state.coloredElementsEnabled,
-                        currencySymbol = state.currencySymbol,
-                        swipeToDeleteEnabled = state.swipeToDeleteEnabled,
-                        onSwipeDelete = { txId ->
-                            viewModel.deleteTransactionWithUndo(txId)
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = context.getString(AppR.string.snackbar_transaction_deleted),
-                                    actionLabel = context.getString(AppR.string.snackbar_undo),
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    viewModel.undoLastDelete()
-                                } else {
-                                    viewModel.clearUndo()
+                val tabAnimSpec = MotokoAnimation.screenSpec<androidx.compose.ui.unit.IntOffset>()
+                val tabFadeSpec = MotokoAnimation.screenSpec<Float>()
+                AnimatedContent(
+                    targetState = state.currentTab,
+                    transitionSpec = {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (slideInHorizontally(
+                            animationSpec = tabAnimSpec,
+                            initialOffsetX = { fullWidth -> direction * (fullWidth / 4) }
+                        ) + fadeIn(animationSpec = tabFadeSpec)) togetherWith
+                        (slideOutHorizontally(
+                            animationSpec = tabAnimSpec,
+                            targetOffsetX = { fullWidth -> -direction * (fullWidth / 4) }
+                        ) + fadeOut(animationSpec = tabFadeSpec))
+                    },
+                    label = "tabTransition"
+                ) { tab ->
+                    when (tab) {
+                        MotokoTab.DASHBOARD -> DashboardScreen(
+                            viewModel = dashboardViewModel,
+                            isPrivacyEnabled = state.isPrivacyEnabled,
+                            hideBudgetCard = state.hideBudgetCard,
+                            coloredElementsEnabled = state.coloredElementsEnabled,
+                            currencySymbol = state.currencySymbol,
+                            walletsList = state.wallets,
+                            onTransactionClick = onTransactionClick
+                        )
+                        MotokoTab.HISTORY -> HistoryScreen(
+                            viewModel = historyViewModel,
+                            isPrivacyEnabled = state.isPrivacyEnabled,
+                            searchQuery = historySearchQuery,
+                            coloredElementsEnabled = state.coloredElementsEnabled,
+                            currencySymbol = state.currencySymbol,
+                            swipeToDeleteEnabled = state.swipeToDeleteEnabled,
+                            onSwipeDelete = { txId ->
+                                viewModel.deleteTransactionWithUndo(txId)
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = context.getString(AppR.string.snackbar_transaction_deleted),
+                                        actionLabel = context.getString(AppR.string.snackbar_undo),
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        viewModel.undoLastDelete()
+                                    } else {
+                                        viewModel.clearUndo()
+                                    }
                                 }
-                            }
-                        },
-                        onTransactionClick = onTransactionClick
-                    )
-                    MotokoTab.SUBSCRIPTIONS -> SubscriptionsScreen(
-                        viewModel = subscriptionsViewModel,
-                        isPrivacyEnabled = state.isPrivacyEnabled,
-                        currencySymbol = state.currencySymbol,
-                        billingFilter = subscriptionsBillingFilter,
-                        onTransactionClick = onTransactionClick
-                    )
-                }
-            }
-        }
-
-        // CAPA 2: CONTROLES FLOTANTES INFERIORES (BARRA DE NAVEGACIÓN Y FAB ADYACENTE)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .padding(bottom = 24.dp, start = 20.dp, end = 20.dp),
-            contentAlignment = state.dockAlignment
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val isLeftAligned = state.dockAlignment == Alignment.BottomStart
-
-                val tabsPill = @Composable {
-                    Row(
-                        modifier = Modifier
-                            .wrapContentHeight()
-                            .shadow(
-                                elevation = 8.dp,
-                                shape = RoundedCornerShape(20.dp),
-                                ambientColor = Color.Black.copy(alpha = 0.5f),
-                                spotColor = Color.Black.copy(alpha = 0.5f)
-                            )
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(20.dp))
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NavigationTabItem(
-                            iconResId = R.drawable.lucide_ic_layout_dashboard,
-                            isSelected = state.currentTab == MotokoTab.DASHBOARD,
-                            onClick = { viewModel.selectTab(MotokoTab.DASHBOARD) }
+                            },
+                            walletsList = state.wallets,
+                            onTransactionClick = onTransactionClick
                         )
-                        NavigationTabItem(
-                            iconResId = R.drawable.lucide_ic_history,
-                            isSelected = state.currentTab == MotokoTab.HISTORY,
-                            onClick = { viewModel.selectTab(MotokoTab.HISTORY) }
-                        )
-                        NavigationTabItem(
-                            iconResId = R.drawable.lucide_ic_calendar_clock,
-                            isSelected = state.currentTab == MotokoTab.SUBSCRIPTIONS,
-                            onClick = { viewModel.selectTab(MotokoTab.SUBSCRIPTIONS) }
+                        MotokoTab.SUBSCRIPTIONS -> SubscriptionsScreen(
+                            viewModel = subscriptionsViewModel,
+                            isPrivacyEnabled = state.isPrivacyEnabled,
+                            currencySymbol = state.currencySymbol,
+                            billingFilter = subscriptionsBillingFilter,
+                            walletsList = state.wallets,
+                            onTransactionClick = onTransactionClick
                         )
                     }
                 }
+            }
+        }
+    }
+}
+}
+}
 
-                val fabButton = @Composable {
+        val rotationAngle by animateFloatAsState(
+            targetValue = if (isFabMenuExpanded) 135f else 0f,
+            animationSpec = if (state.animationsEnabled) {
+                androidx.compose.animation.core.spring(
+                    dampingRatio = 0.72f,
+                    stiffness = 380f
+                )
+            } else androidx.compose.animation.core.snap(),
+            label = "fabRotation"
+        )
+
+        val menuTransitionProgress by animateFloatAsState(
+            targetValue = if (isFabMenuExpanded) 1f else 0f,
+            animationSpec = if (state.animationsEnabled) {
+                androidx.compose.animation.core.spring(
+                    dampingRatio = 0.72f,
+                    stiffness = 350f
+                )
+            } else androidx.compose.animation.core.snap(),
+            label = "menuTransitionProgress"
+        )
+
+        AnimatedVisibility(
+            visible = currentOverlayMode == 0,
+            enter = fadeIn(animationSpec = overlayFadeSpec) + slideInVertically(
+                animationSpec = overlayAnimSpec,
+                initialOffsetY = { fullHeight -> fullHeight }
+            ),
+            exit = fadeOut(animationSpec = overlayFadeSpec) + slideOutVertically(
+                animationSpec = overlayAnimSpec,
+                targetOffsetY = { fullHeight -> fullHeight }
+            )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (isFabMenuExpanded || menuTransitionProgress > 0f) {
                     Box(
                         modifier = Modifier
-                            .size(65.dp)
-                            .shadow(
-                                elevation = 8.dp,
-                                shape = RoundedCornerShape(20.dp),
-                                ambientColor = Color.Black.copy(alpha = 0.5f),
-                                spotColor = Color.Black.copy(alpha = 0.5f)
-                            )
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(20.dp))
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = (menuTransitionProgress * 0.5f).coerceIn(0f, 0.5f) }
+                            .background(Color.Black)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
-                                showNewItem = true
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.lucide_ic_plus),
-                            contentDescription = stringResource(id = AppR.string.desc_add_transaction),
-                            tint = LocalMotokoColors.current.iconOnDark,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
+                                isFabMenuExpanded = false
+                            }
+                    )
                 }
 
-                if (isLeftAligned) {
-                    fabButton()
-                    tabsPill()
-                } else {
-                    tabsPill()
-                    fabButton()
-                }
+                // CAPA 2: CONTROLES FLOTANTES INFERIORES (BARRA DE NAVEGACIÓN Y FAB ADYACENTE)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding()
+                        .padding(bottom = 24.dp, start = 20.dp, end = 20.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .responsiveWidth(840.dp),
+                        contentAlignment = state.dockAlignment
+                    ) {
+                        val isLeftAligned = state.dockAlignment == Alignment.BottomStart
+
+                        val tabsPill = @Composable {
+                            Row(
+                                modifier = Modifier
+                                    .wrapContentHeight()
+                                    .shadow(
+                                        elevation = 8.dp,
+                                        shape = RoundedCornerShape(20.dp),
+                                        ambientColor = Color.Black.copy(alpha = 0.5f),
+                                        spotColor = Color.Black.copy(alpha = 0.5f)
+                                    )
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                NavigationTabItem(
+                                    iconResId = R.drawable.lucide_ic_layout_dashboard,
+                                    isSelected = state.currentTab == MotokoTab.DASHBOARD,
+                                    onClick = { viewModel.selectTab(MotokoTab.DASHBOARD) }
+                                )
+                                NavigationTabItem(
+                                    iconResId = R.drawable.lucide_ic_history,
+                                    isSelected = state.currentTab == MotokoTab.HISTORY,
+                                    onClick = { viewModel.selectTab(MotokoTab.HISTORY) }
+                                )
+                                NavigationTabItem(
+                                    iconResId = R.drawable.lucide_ic_calendar_clock,
+                                    isSelected = state.currentTab == MotokoTab.SUBSCRIPTIONS,
+                                    onClick = { viewModel.selectTab(MotokoTab.SUBSCRIPTIONS) }
+                                )
+                            }
+                        }
+
+                        val fabButton = @Composable {
+                            Box(
+                                contentAlignment = Alignment.TopStart,
+                                modifier = Modifier.wrapContentSize()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(65.dp)
+                                        .shadow(
+                                            elevation = 8.dp,
+                                            shape = RoundedCornerShape(20.dp),
+                                            ambientColor = Color.Black.copy(alpha = 0.5f),
+                                            spotColor = Color.Black.copy(alpha = 0.5f)
+                                        )
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(20.dp))
+                                        .bounceClick(pressedScale = 0.92f) {
+                                            isFabMenuExpanded = !isFabMenuExpanded
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.lucide_ic_plus),
+                                        contentDescription = stringResource(id = AppR.string.desc_add_transaction),
+                                        tint = LocalMotokoColors.current.iconOnDark,
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .graphicsLayer { rotationZ = rotationAngle }
+                                    )
+                                }
+
+                                if (isFabMenuExpanded || menuTransitionProgress > 0f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .layout { measurable, constraints ->
+                                                val placeable = measurable.measure(
+                                                    constraints.copy(
+                                                        minWidth = 0,
+                                                        maxWidth = androidx.compose.ui.unit.Constraints.Infinity
+                                                    )
+                                                )
+                                                layout(0, 0) {
+                                                    val xOffset = when (state.dockAlignment) {
+                                                        Alignment.BottomStart -> 0
+                                                        else -> -placeable.width + 65.dp.roundToPx()
+                                                    }
+                                                    placeable.place(xOffset, -placeable.height - 16.dp.roundToPx())
+                                                }
+                                            }
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = when (state.dockAlignment) {
+                                                Alignment.BottomStart -> Alignment.Start
+                                                else -> Alignment.End
+                                            },
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            val speedDialOptions = listOf(
+                                                Triple(AppR.string.new_item_tab_subscription, R.drawable.lucide_ic_repeat, ItemType.SUBSCRIPTION),
+                                                Triple(AppR.string.new_item_tab_expense, R.drawable.lucide_ic_trending_down, ItemType.EXPENSE),
+                                                Triple(AppR.string.new_item_tab_income, R.drawable.lucide_ic_trending_up, ItemType.INCOME)
+                                            )
+
+                                            speedDialOptions.forEachIndexed { index, (textRes, iconRes, type) ->
+                                                val staggerOffset = (speedDialOptions.size - 1 - index) * 0.16f
+                                                val itemProgress = if (state.animationsEnabled) {
+                                                    ((menuTransitionProgress - staggerOffset) / (1f - staggerOffset)).coerceIn(0f, 1f)
+                                                } else menuTransitionProgress
+
+                                                val itemScale = 0.65f + (itemProgress * 0.35f)
+                                                val itemOffsetY = (1f - itemProgress) * 20.dp.value
+
+                                                Box(
+                                                    modifier = Modifier.graphicsLayer {
+                                                        alpha = itemProgress
+                                                        scaleX = itemScale
+                                                        scaleY = itemScale
+                                                        translationY = with(density) { itemOffsetY.dp.toPx() }
+                                                    }
+                                                ) {
+                                                    SpeedDialItem(
+                                                        text = stringResource(id = textRes),
+                                                        iconRes = iconRes,
+                                                        onClick = {
+                                                            newItemViewModel.onTypeSelected(type)
+                                                            showNewItem = true
+                                                            isFabMenuExpanded = false
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (isLeftAligned) {
+                                fabButton()
+                                tabsPill()
+                            } else {
+                                tabsPill()
+                                fabButton()
+                            }
+                        }
             }
+        }
         }
         }
 
@@ -528,6 +756,14 @@ fun MainScreen(
                     }
                 },
                 onSaveEdited = { name, amount, wallet, category, date, note, account, iconName, receipt, billingPeriod ->
+                    detailName = name
+                    detailAmount = amount
+                    detailWallet = wallet
+                    detailCategory = category
+                    detailDate = date
+                    detailNote = note
+                    detailAccount = account
+                    detailIcon = iconName
                     detailReceipt = receipt
                     viewModel.updateItem(
                         id = detailId,
@@ -562,6 +798,13 @@ fun MainScreen(
             contentAlignment = Alignment.BottomCenter
         ) {
             SnackbarHost(hostState = snackbarHostState)
+        }
+
+        if (viewModel.showUpdateDialog && !showSettings) {
+            com.ixeken.motoko.presentation.settings.MotokoUpdateDialog(
+                viewModel = viewModel,
+                onDismiss = { viewModel.clearUpdateResult() }
+            )
         }
     }
 }
@@ -699,11 +942,7 @@ fun NavigationTabItem(
             .size(50.dp)
             .background(backgroundColor, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
+            .bounceClick(pressedScale = 0.92f, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
@@ -1149,24 +1388,35 @@ fun DashboardHeaderContent(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             val expensesText = if (isPrivacyEnabled) "• • •" else com.ixeken.motoko.util.CurrencyFormatter.format(expensesAmount, currencySymbol, isPrivacyEnabled = false)
             val incomeText = if (isPrivacyEnabled) "• • •" else com.ixeken.motoko.util.CurrencyFormatter.format(incomeAmount, currencySymbol, isPrivacyEnabled = false)
 
-            Text(
-                text = stringResource(id = AppR.string.dashboard_expenses, expensesText),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = stringResource(id = AppR.string.dashboard_income, incomeText),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (incomeAmount < 0) LocalMotokoColors.current.colorExpense else if (coloredElementsEnabled) LocalMotokoColors.current.colorIncome else MaterialTheme.colorScheme.onBackground
-            )
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = stringResource(id = AppR.string.dashboard_expenses, expensesText),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else MaterialTheme.colorScheme.onBackground
+                )
+            }
+
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Text(
+                    text = stringResource(id = AppR.string.dashboard_income, incomeText),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    color = if (incomeAmount < 0) LocalMotokoColors.current.colorExpense else if (coloredElementsEnabled) LocalMotokoColors.current.colorIncome else MaterialTheme.colorScheme.onBackground
+                )
+            }
         }
 
         if (!isMinimized) {
@@ -1388,7 +1638,13 @@ fun HistoryHeaderContent(
                 selectedCategory = selectedCategory,
                 onCategorySelected = onCategorySelected,
                 coloredElementsEnabled = coloredElementsEnabled,
-                categoriesList = categoriesList
+                categoriesList = categoriesList,
+                onClearAll = {
+                    onTimeSelected(HistoryTimeFilter.ALL)
+                    onCategorySelected("")
+                    onTypeSelected(HistoryTypeFilter.ALL)
+                    onQueryChange("")
+                }
             )
         }
     }
@@ -1622,7 +1878,8 @@ private fun HistorySearchBar(
                 textStyle = TextStyle(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
-                    color = LocalMotokoColors.current.textOnDark
+                    color = LocalMotokoColors.current.textOnDark,
+                    fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
                 ),
                 cursorBrush = SolidColor(LocalMotokoColors.current.surfaceCard),
                 modifier = Modifier.fillMaxWidth()
@@ -1656,7 +1913,8 @@ private fun HistoryFilterRow(
     selectedCategory: String,
     onCategorySelected: (String) -> Unit,
     coloredElementsEnabled: Boolean,
-    categoriesList: List<String> = emptyList()
+    categoriesList: List<String> = emptyList(),
+    onClearAll: () -> Unit
 ) {
     var showTimeDialog by remember { mutableStateOf(false) }
 
@@ -1680,37 +1938,41 @@ private fun HistoryFilterRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        HistoryFilterChip(
-            label = timeLabel,
-            descRes = AppR.string.desc_history_filter_time,
-            onClick = { showTimeDialog = true }
-        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HistoryFilterChip(
+                label = timeLabel,
+                descRes = AppR.string.desc_history_filter_time,
+                onClick = { showTimeDialog = true }
+            )
+            HistoryFilterChip(
+                label = if (selectedCategory.isEmpty()) stringResource(id = AppR.string.history_filter_category) else selectedCategory,
+                descRes = AppR.string.desc_history_filter_category,
+                onClick = { showCategoryDialog = true }
+            )
+            HistoryFilterChip(
+                label = when (selectedType) {
+                    HistoryTypeFilter.ALL -> stringResource(id = AppR.string.history_filter_type)
+                    HistoryTypeFilter.INCOME -> stringResource(id = AppR.string.history_filter_type_income)
+                    HistoryTypeFilter.EXPENSE -> stringResource(id = AppR.string.history_filter_type_expense)
+                },
+                descRes = AppR.string.desc_history_filter_type,
+                onClick = { showTypeDialog = true }
+            )
+        }
         Spacer(modifier = Modifier.width(8.dp))
-        HistoryFilterChip(
-            label = if (selectedCategory.isEmpty()) stringResource(id = AppR.string.history_filter_category) else selectedCategory,
-            descRes = AppR.string.desc_history_filter_category,
-            onClick = { showCategoryDialog = true }
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        HistoryFilterChip(
-            label = when (selectedType) {
-                HistoryTypeFilter.ALL -> stringResource(id = AppR.string.history_filter_type)
-                HistoryTypeFilter.INCOME -> stringResource(id = AppR.string.history_filter_type_income)
-                HistoryTypeFilter.EXPENSE -> stringResource(id = AppR.string.history_filter_type_expense)
-            },
-            descRes = AppR.string.desc_history_filter_type,
-            onClick = { showTypeDialog = true }
-        )
-        Spacer(modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
                 .size(32.dp)
                 .background(if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else LocalMotokoColors.current.primaryDark, RoundedCornerShape(8.dp))
                 .clip(RoundedCornerShape(8.dp))
                 .clickable {
-                    onTimeSelected(HistoryTimeFilter.ALL)
-                    onCategorySelected("")
-                    onTypeSelected(HistoryTypeFilter.ALL)
+                    onClearAll()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -1933,16 +2195,18 @@ private fun HistoryFilterChip(label: String, descRes: Int, onClick: () -> Unit) 
             .background(LocalMotokoColors.current.surfaceCard, RoundedCornerShape(8.dp))
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = LocalMotokoColors.current.textPrimary
         )
-        Spacer(modifier = Modifier.width(4.dp))
+        Spacer(modifier = Modifier.width(3.dp))
         Icon(
             painter = painterResource(id = R.drawable.lucide_ic_chevron_down),
             contentDescription = stringResource(id = descRes),
@@ -2019,6 +2283,45 @@ fun DashboardCategoryCard(
                     softWrap = false
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SpeedDialItem(
+    text: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = LocalMotokoColors.current.primaryDark,
+        shadowElevation = 8.dp,
+        tonalElevation = 4.dp,
+        modifier = modifier
+            .wrapContentSize()
+            .bounceClick(pressedScale = 0.94f, onClick = onClick)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp)
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = LocalMotokoColors.current.iconOnDark,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = LocalMotokoColors.current.textOnDark
+            )
         }
     }
 }

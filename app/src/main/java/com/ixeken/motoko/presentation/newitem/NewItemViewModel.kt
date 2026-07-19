@@ -46,15 +46,20 @@ data class NewItemUiState(
  * Las categorías personalizadas usan "Folder" como icono genérico.
  */
 fun defaultIconForCategory(category: String): String = when (category) {
-    "Food" -> "Soup"
+    "Food", "Restaurants" -> "Soup"
+    "Groceries" -> "ShoppingCart"
     "House" -> "House"
-    "Entertainment" -> "Ticket"
+    "Utilities" -> "Zap"
     "Transport" -> "Train"
+    "Health" -> "Heart"
+    "Entertainment" -> "Ticket"
+    "Subscriptions" -> "Ticket"
     "Gaming" -> "Gamepad"
-    "Shopping" -> "ShoppingCart"
-    "Others" -> "Folder"
+    "Shopping" -> "ShoppingBag"
+    "Education" -> "GraduationCap"
+    "Travel" -> "Plane"
     "Income" -> "TrendingUp"
-    "Subscriptions" -> "Refresh"
+    "Others" -> "Folder"
     else -> "Folder"
 }
 
@@ -146,6 +151,23 @@ class NewItemViewModel @Inject constructor(
 
     fun onPeriodChanged(period: String) {
         _uiState.update { it.copy(period = period) }
+    }
+
+    fun resetForm() {
+        val today = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+        _uiState.update {
+            it.copy(
+                name = "",
+                amount = "",
+                wallet = "",
+                date = today,
+                note = "",
+                icon = "",
+                category = "",
+                receipt = "",
+                period = ""
+            )
+        }
     }
 
     /** Agrega una billetera nueva al catálogo compartido y la selecciona. */

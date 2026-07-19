@@ -4,17 +4,28 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.SolidColor
@@ -22,11 +33,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ixeken.motoko.data.local.resolveWalletName
 import com.composables.icons.lucide.R
 import com.ixeken.motoko.R as AppR
 import com.ixeken.motoko.ui.theme.LocalMotokoColors
@@ -97,6 +114,9 @@ fun ItemDetailBottomSheet(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val currencySymbol = uiState.currencySymbol
+
     var isEditingMode by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -180,11 +200,7 @@ fun ItemDetailBottomSheet(
                 if (sub != null) {
                     editName = sub.name
                     editAmount = String.format(java.util.Locale.US, "%.2f", sub.amount)
-                    editWallet = when (sub.wallet) {
-                        com.ixeken.motoko.data.local.WalletType.CASH -> "Cash"
-                        com.ixeken.motoko.data.local.WalletType.SAVINGS -> "Savings"
-                        else -> "Debit Card"
-                    }
+                    editWallet = resolveWalletName(sub.wallet, walletsState, context)
                     editCategory = sub.category
                     val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
                     editDate = sdf.format(java.util.Date(sub.startDate))
@@ -198,11 +214,7 @@ fun ItemDetailBottomSheet(
                 if (tx != null) {
                     editName = tx.title
                     editAmount = String.format(java.util.Locale.US, "%.2f", tx.amount)
-                    editWallet = when (tx.wallet) {
-                        com.ixeken.motoko.data.local.WalletType.CASH -> "Cash"
-                        com.ixeken.motoko.data.local.WalletType.SAVINGS -> "Savings"
-                        else -> "Debit Card"
-                    }
+                    editWallet = resolveWalletName(tx.wallet, walletsState, context)
                     editCategory = tx.category
                     val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
                     editDate = sdf.format(java.util.Date(tx.timestamp))
@@ -215,7 +227,31 @@ fun ItemDetailBottomSheet(
         }
     }
 
+    val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val animateDismiss: (() -> Unit) -> Unit = { action ->
+        scope.launch {
+            sheetState.hide()
+        }.invokeOnCompletion {
+            if (!sheetState.isVisible) {
+                action()
+                onDismissRequest()
+            }
+        }
+    }
+
+    val stopSheetSwipeConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (available.y > 0f) Offset(0f, available.y) else Offset.Zero
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -231,6 +267,10 @@ fun ItemDetailBottomSheet(
                 .fillMaxHeight()
                 .navigationBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
+                .nestedScroll(stopSheetSwipeConnection)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, _ -> }
+                }
         ) {
             if (!isEditingMode) {
                 Column(
@@ -238,6 +278,99 @@ fun ItemDetailBottomSheet(
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
+                // Top Header Action Buttons (Edit, Delete, Close X)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Botón Edit (izq)
+                    Box(
+                        modifier = Modifier
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { isEditingMode = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.lucide_ic_pencil),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = AppR.string.btn_edit),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Botón Delete (izq)
+                    Box(
+                        modifier = Modifier
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                if (muteDeleteWarnings) {
+                                    animateDismiss {
+                                        onDeleteConfirmed(false)
+                                    }
+                                } else {
+                                    showDeleteDialog = true
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.lucide_ic_trash_2),
+                                contentDescription = null,
+                                tint = if (uiState.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = AppR.string.btn_delete),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Botón Close X (der)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { animateDismiss {} },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.lucide_ic_x),
+                            contentDescription = stringResource(id = AppR.string.dialog_close),
+                            tint = if (uiState.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
                 // 1. Tarjeta Fija de Cabecera
                 Card(
                     modifier = Modifier
@@ -260,7 +393,7 @@ fun ItemDetailBottomSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                painter = painterResource(id = getIconRes(iconName)),
+                                painter = painterResource(id = getIconRes(editIcon)),
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
@@ -271,7 +404,7 @@ fun ItemDetailBottomSheet(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = name,
+                                text = editName,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -288,15 +421,28 @@ fun ItemDetailBottomSheet(
                             )
                         }
 
+                        val displayAmount = remember(editAmount, type, currencySymbol) {
+                            val clean = editAmount.trim()
+                            if (clean.contains("$") || clean.contains("€") || clean.contains("£") || clean.contains("¥") || clean.contains("₹") || clean.startsWith("+") || clean.startsWith("-")) {
+                                clean
+                            } else {
+                                val sign = when (type) {
+                                    ItemType.INCOME -> "+"
+                                    ItemType.EXPENSE, ItemType.SUBSCRIPTION -> "-"
+                                }
+                                "$sign$currencySymbol $clean"
+                            }
+                        }
+
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = amount,
+                                text = displayAmount,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = if (type == ItemType.INCOME) LocalMotokoColors.current.colorIncome else LocalMotokoColors.current.colorExpense
                             )
                             Text(
-                                text = date,
+                                text = editDate,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Normal,
                                 color = LocalMotokoColors.current.textMuted
@@ -324,16 +470,16 @@ fun ItemDetailBottomSheet(
                     if (type == ItemType.EXPENSE) {
                         DetailField(
                             label = stringResource(id = AppR.string.new_item_label_category),
-                            value = category
+                            value = editCategory
                         )
                     }
                     DetailField(
                         label = stringResource(id = AppR.string.new_item_label_wallet),
-                        value = wallet
+                        value = editWallet
                     )
                     DetailField(
                         label = stringResource(id = AppR.string.new_item_label_date),
-                        value = date
+                        value = editDate
                     )
                     if (type == ItemType.SUBSCRIPTION) {
                         DetailField(
@@ -341,10 +487,10 @@ fun ItemDetailBottomSheet(
                             value = if (editPeriod == com.ixeken.motoko.data.local.BillingPeriod.ANNUAL) "Annual" else "Monthly"
                         )
                     }
-                    if (note.isNotEmpty()) {
+                    if (editNote.isNotEmpty()) {
                         DetailField(
                             label = stringResource(id = AppR.string.new_item_label_note),
-                            value = note
+                            value = editNote
                         )
                     }
                     DetailField(
@@ -388,88 +534,92 @@ fun ItemDetailBottomSheet(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // 3. Fila de Acciones: Edit y Delete
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable { isEditingMode = true },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(id = AppR.string.btn_edit),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable {
-                                if (muteDeleteWarnings) {
-                                    onDeleteConfirmed(false)
-                                    onDismissRequest()
-                                } else {
-                                    showDeleteDialog = true
-                                }
-                            },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(id = AppR.string.btn_delete),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Botón de cierre
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .clickable(onClick = onDismissRequest),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(id = AppR.string.dialog_close),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
                 }
             } else {
                 // Formulario de Edición
-                Text(
-                    text = stringResource(id = AppR.string.edit_item_title),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalMotokoColors.current.textPrimary,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                val editTitleRes = when (type) {
+                    ItemType.INCOME -> AppR.string.edit_item_title_income
+                    ItemType.EXPENSE -> AppR.string.edit_item_title_expense
+                    ItemType.SUBSCRIPTION -> AppR.string.edit_item_title_subscription
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = editTitleRes),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Botón Save (izq de X)
+                    Box(
+                        modifier = Modifier
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onSaveEdited(
+                                    editName,
+                                    editAmount,
+                                    editWallet,
+                                    editCategory,
+                                    editDate,
+                                    editNote,
+                                    editAccount,
+                                    editIcon,
+                                    editReceipt,
+                                    if (type == ItemType.SUBSCRIPTION) {
+                                        if (editPeriod == com.ixeken.motoko.data.local.BillingPeriod.ANNUAL) "Annual" else "Monthly"
+                                    } else null
+                                )
+                                isEditingMode = false
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.lucide_ic_save),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = AppR.string.manage_btn_save),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Botón Close X (der)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { isEditingMode = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.lucide_ic_x),
+                            contentDescription = stringResource(id = AppR.string.dialog_close),
+                            tint = if (uiState.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
 
                 LazyColumn(
                     modifier = Modifier
@@ -488,35 +638,71 @@ fun ItemDetailBottomSheet(
                                 )
                             }
                             item {
-                                NewFormInput(
+                                AmountFormInput(
                                     label = stringResource(id = AppR.string.new_item_label_amount),
                                     value = editAmount,
                                     onValueChange = { editAmount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_amount)
+                                    currencySymbol = currencySymbol
                                 )
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_wallet),
-                                    value = editWallet,
-                                    onValueChange = { editWallet = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.WALLET
-                                        showSelectorSheet = true
-                                    }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_icon),
+                                        value = editIcon,
+                                        onValueChange = { editIcon = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                        iconRes = getCategoryIconRes(editIcon),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ICON
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_date),
+                                        value = editDate,
+                                        onValueChange = { editDate = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                        iconRes = R.drawable.lucide_ic_calendar,
+                                        onClick = { showDatePicker = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_date),
-                                    value = editDate,
-                                    onValueChange = { editDate = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                                    iconRes = R.drawable.lucide_ic_calendar,
-                                    onClick = { showDatePicker = true }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_wallet),
+                                        value = editWallet,
+                                        onValueChange = { editWallet = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                        iconRes = getWalletIconRes(editWallet),
+                                        onClick = {
+                                            selectorTab = SelectorTab.WALLET
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_account),
+                                        value = editAccount,
+                                        onValueChange = { editAccount = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                        iconRes = getAccountIconRes(editAccount),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ACCOUNT
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
                                 NewFormInput(
@@ -537,32 +723,6 @@ fun ItemDetailBottomSheet(
                                     placeholder = stringResource(id = AppR.string.new_item_placeholder_receipt),
                                     iconRes = R.drawable.lucide_ic_camera,
                                     onClick = { showReceiptSourceDialog = true }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_icon),
-                                    value = editIcon,
-                                    onValueChange = { editIcon = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ICON
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_account),
-                                    value = editAccount,
-                                    onValueChange = { editAccount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ACCOUNT
-                                        showSelectorSheet = true
-                                    }
                                 )
                             }
                         }
@@ -576,48 +736,89 @@ fun ItemDetailBottomSheet(
                                 )
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_amount),
-                                    value = editAmount,
-                                    onValueChange = { editAmount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_amount)
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    AmountFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_amount),
+                                        value = editAmount,
+                                        onValueChange = { editAmount = it },
+                                        currencySymbol = currencySymbol,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_icon),
+                                        value = editIcon,
+                                        onValueChange = { editIcon = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                        iconRes = getCategoryIconRes(editIcon),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ICON
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_category),
-                                    value = editCategory,
-                                    onValueChange = { editCategory = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_category),
-                                    iconRes = R.drawable.lucide_ic_layout_grid,
-                                    onClick = {
-                                        selectorTab = SelectorTab.CATEGORY
-                                        showSelectorSheet = true
-                                    }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_category),
+                                        value = editCategory,
+                                        onValueChange = { editCategory = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_category),
+                                        iconRes = getCategoryIconRes(editCategory),
+                                        onClick = {
+                                            selectorTab = SelectorTab.CATEGORY
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_date),
+                                        value = editDate,
+                                        onValueChange = { editDate = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                        iconRes = R.drawable.lucide_ic_calendar,
+                                        onClick = { showDatePicker = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_wallet),
-                                    value = editWallet,
-                                    onValueChange = { editWallet = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.WALLET
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_date),
-                                    value = editDate,
-                                    onValueChange = { editDate = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                                    iconRes = R.drawable.lucide_ic_calendar,
-                                    onClick = { showDatePicker = true }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_wallet),
+                                        value = editWallet,
+                                        onValueChange = { editWallet = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                        iconRes = getWalletIconRes(editWallet),
+                                        onClick = {
+                                            selectorTab = SelectorTab.WALLET
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_account),
+                                        value = editAccount,
+                                        onValueChange = { editAccount = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                        iconRes = getAccountIconRes(editAccount),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ACCOUNT
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
                                 NewFormInput(
@@ -640,32 +841,6 @@ fun ItemDetailBottomSheet(
                                     onClick = { showReceiptSourceDialog = true }
                                 )
                             }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_icon),
-                                    value = editIcon,
-                                    onValueChange = { editIcon = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ICON
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_account),
-                                    value = editAccount,
-                                    onValueChange = { editAccount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ACCOUNT
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
                         }
                         ItemType.SUBSCRIPTION -> {
                             item {
@@ -677,37 +852,91 @@ fun ItemDetailBottomSheet(
                                 )
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_amount),
-                                    value = editAmount,
-                                    onValueChange = { editAmount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_amount)
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    AmountFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_amount),
+                                        value = editAmount,
+                                        onValueChange = { editAmount = it },
+                                        currencySymbol = currencySymbol,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_icon),
+                                        value = editIcon,
+                                        onValueChange = { editIcon = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                        iconRes = getCategoryIconRes(editIcon),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ICON
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_date),
-                                    value = editDate,
-                                    onValueChange = { editDate = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                                    iconRes = R.drawable.lucide_ic_calendar,
-                                    onClick = { showDatePicker = true }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_date),
+                                        value = editDate,
+                                        onValueChange = { editDate = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                        iconRes = R.drawable.lucide_ic_calendar,
+                                        onClick = { showDatePicker = true },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_billing_period),
+                                        value = when (editPeriod) {
+                                            com.ixeken.motoko.data.local.BillingPeriod.ANNUAL -> "Annual"
+                                            else -> "Monthly"
+                                        },
+                                        onValueChange = { },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_billing_period),
+                                        iconRes = R.drawable.lucide_ic_chevron_down,
+                                        onClick = {
+                                            showBillingDialog = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_billing_period),
-                                    value = when (editPeriod) {
-                                        com.ixeken.motoko.data.local.BillingPeriod.ANNUAL -> "Annual"
-                                        else -> "Monthly"
-                                    },
-                                    onValueChange = { },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_billing_period),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        showBillingDialog = true
-                                    }
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_wallet),
+                                        value = editWallet,
+                                        onValueChange = { editWallet = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                        iconRes = getWalletIconRes(editWallet),
+                                        onClick = {
+                                            selectorTab = SelectorTab.WALLET
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NewFormInput(
+                                        label = stringResource(id = AppR.string.new_item_label_account),
+                                        value = editAccount,
+                                        onValueChange = { editAccount = it },
+                                        placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                        iconRes = getAccountIconRes(editAccount),
+                                        onClick = {
+                                            selectorTab = SelectorTab.ACCOUNT
+                                            showSelectorSheet = true
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             item {
                                 NewFormInput(
@@ -718,133 +947,23 @@ fun ItemDetailBottomSheet(
                                 )
                             }
                             item {
+                                val displayName = remember(editReceipt) {
+                                    if (editReceipt.isNotEmpty()) java.io.File(editReceipt).name else ""
+                                }
                                 NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_wallet),
-                                    value = editWallet,
-                                    onValueChange = { editWallet = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.WALLET
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_icon),
-                                    value = editIcon,
-                                    onValueChange = { editIcon = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ICON
-                                        showSelectorSheet = true
-                                    }
-                                )
-                            }
-                            item {
-                                NewFormInput(
-                                    label = stringResource(id = AppR.string.new_item_label_account),
-                                    value = editAccount,
-                                    onValueChange = { editAccount = it },
-                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                                    iconRes = R.drawable.lucide_ic_chevron_down,
-                                    onClick = {
-                                        selectorTab = SelectorTab.ACCOUNT
-                                        showSelectorSheet = true
-                                    }
+                                    label = stringResource(id = AppR.string.new_item_label_receipt),
+                                    value = displayName,
+                                    onValueChange = { },
+                                    placeholder = stringResource(id = AppR.string.new_item_placeholder_receipt),
+                                    iconRes = R.drawable.lucide_ic_camera,
+                                    onClick = { showReceiptSourceDialog = true }
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
 
-                // Fila de doble control: Cancel y Save
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable {
-                                editName = name
-                                editAmount = amount
-                                editWallet = wallet
-                                editCategory = category
-                                editDate = date
-                                editNote = note
-                                editAccount = account
-                                editIcon = iconName
-                                editReceipt = receiptPath
-                                isEditingMode = false
-                            },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(id = AppR.string.btn_cancel),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable {
-                                onSaveEdited(
-                                    editName,
-                                    editAmount,
-                                    editWallet,
-                                    editCategory,
-                                    editDate,
-                                    editNote,
-                                    editAccount,
-                                    editIcon,
-                                    editReceipt,
-                                    if (type == ItemType.SUBSCRIPTION) {
-                                        if (editPeriod == com.ixeken.motoko.data.local.BillingPeriod.ANNUAL) "Annual" else "Monthly"
-                                    } else null
-                                )
-                                isEditingMode = false
-                            },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 20.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(
-                                text = stringResource(id = AppR.string.new_item_btn_save),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Icon(
-                                painter = painterResource(id = R.drawable.lucide_ic_save),
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -1091,6 +1210,7 @@ private fun DetailField(
     label: String,
     value: String
 ) {
+    val borderColor = LocalMotokoColors.current.primaryDark.copy(alpha = 0.5f)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -1103,7 +1223,18 @@ private fun DetailField(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .background(LocalMotokoColors.current.activeTab, shape = RoundedCornerShape(16.dp))
+                .background(LocalMotokoColors.current.surfaceCard, shape = RoundedCornerShape(16.dp))
+                .drawWithContent {
+                    drawContent()
+                    drawRoundRect(
+                        color = borderColor,
+                        cornerRadius = CornerRadius(16.dp.toPx(), 16.dp.toPx()),
+                        style = Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f)
+                        )
+                    )
+                }
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1111,7 +1242,7 @@ private fun DetailField(
                 text = value,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
-                color = Color.White
+                color = LocalMotokoColors.current.primaryDark
             )
         }
     }
@@ -1202,6 +1333,78 @@ fun DeleteConfirmationDialog(
     }
 }
 
+@Composable
+private fun AmountFormInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    currencySymbol: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(LocalMotokoColors.current.activeTab)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = currencySymbol,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = LocalMotokoColors.current.textOnDark
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = "0",
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LocalMotokoColors.current.textMuted,
+                            textAlign = TextAlign.End
+                        )
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    textStyle = TextStyle(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LocalMotokoColors.current.textOnDark,
+                        textAlign = TextAlign.End,
+                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
+                    ),
+                    cursorBrush = SolidColor(LocalMotokoColors.current.textOnDark),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
 /**
  * Input para edicion.
  */
@@ -1218,9 +1421,11 @@ private fun NewFormInput(
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = label,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(
@@ -1242,17 +1447,27 @@ private fun NewFormInput(
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = LocalMotokoColors.current.textMuted
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = LocalMotokoColors.current.textMuted
+                        )
                     )
                 }
                 if (onClick != null) {
                     Text(
                         text = value,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color.White
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.White
+                        )
                     )
                 } else {
                     BasicTextField(
@@ -1262,7 +1477,8 @@ private fun NewFormInput(
                         textStyle = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Normal,
-                            color = Color.White
+                            color = Color.White,
+                            fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
                         ),
                         cursorBrush = SolidColor(Color.White),
                         modifier = Modifier.fillMaxWidth()

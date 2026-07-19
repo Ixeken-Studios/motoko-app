@@ -37,6 +37,8 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
         val IS_FIRST_RUN = booleanPreferencesKey("is_first_run")
         val CATEGORY_ICONS = stringPreferencesKey("category_icons")
         val CHECK_UPDATE_ON_START = booleanPreferencesKey("check_update_on_start")
+        val DASHBOARD_VIEW_MODE = stringPreferencesKey("dashboard_view_mode")
+        val DASHBOARD_PERIOD = stringPreferencesKey("dashboard_period")
     }
 
     // Separador interno usado para serializar listas en DataStore
@@ -474,6 +476,34 @@ class UserPreferences(private val dataStore: DataStore<Preferences>) {
     suspend fun setFirstRun(value: Boolean) {
         dataStore.edit { preferences ->
             preferences[Keys.IS_FIRST_RUN] = value
+        }
+    }
+
+    val dashboardViewMode: Flow<String> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) emit(emptyPreferences()) else throw exception
+        }
+        .map { preferences ->
+            preferences[Keys.DASHBOARD_VIEW_MODE] ?: "LIST"
+        }
+
+    suspend fun setDashboardViewMode(mode: String) {
+        dataStore.edit { preferences ->
+            preferences[Keys.DASHBOARD_VIEW_MODE] = mode
+        }
+    }
+
+    val dashboardPeriod: Flow<String> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) emit(emptyPreferences()) else throw exception
+        }
+        .map { preferences ->
+            preferences[Keys.DASHBOARD_PERIOD] ?: "DAY"
+        }
+
+    suspend fun setDashboardPeriod(period: String) {
+        dataStore.edit { preferences ->
+            preferences[Keys.DASHBOARD_PERIOD] = period
         }
     }
 }

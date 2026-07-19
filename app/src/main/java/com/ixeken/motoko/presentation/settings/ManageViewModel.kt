@@ -148,23 +148,41 @@ class ManageViewModel @Inject constructor(
             val updated = userPreferences.categoriesCatalog.first()
                 .filterNot { names.contains(it) }
             userPreferences.setCategoriesCatalog(updated)
+            _selectedItemsForDelete.value = emptySet()
+            _mode.value = OperationMode.IDLE
         }
     }
 
-    fun addWallet(name: String) {
+    fun executeDeleteSelected() {
+        val names = _selectedItemsForDelete.value
+        if (names.isEmpty()) return
+        when (_activeTarget.value) {
+            ManageTarget.CATEGORY -> deleteCategories(names)
+            ManageTarget.WALLET -> requestDeleteWallets(names)
+            ManageTarget.ACCOUNT -> requestDeleteAccounts(names)
+        }
+    }
+
+    fun addWallet(name: String, iconName: String = "") {
         viewModelScope.launch(Dispatchers.IO) {
             val current = userPreferences.walletsCatalog.first()
             if (!current.contains(name)) {
                 userPreferences.setWalletsCatalog(current + name)
             }
+            if (iconName.isNotBlank()) {
+                userPreferences.setCategoryIcon(name, iconName)
+            }
         }
     }
 
-    fun editWallet(oldName: String, newName: String) {
+    fun editWallet(oldName: String, newName: String, iconName: String = "") {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = userPreferences.walletsCatalog.first()
                 .map { if (it == oldName) newName else it }
             userPreferences.setWalletsCatalog(updated)
+            if (iconName.isNotBlank()) {
+                userPreferences.setCategoryIcon(newName, iconName)
+            }
         }
     }
 
@@ -198,6 +216,8 @@ class ManageViewModel @Inject constructor(
         val updated = userPreferences.walletsCatalog.first()
             .filterNot { names.contains(it) }
         userPreferences.setWalletsCatalog(updated)
+        _selectedItemsForDelete.value = emptySet()
+        _mode.value = OperationMode.IDLE
     }
 
     fun confirmDeleteWithCascade() {
@@ -251,20 +271,28 @@ class ManageViewModel @Inject constructor(
         if (targets.isNotEmpty()) {
             repository.deleteAccounts(targets)
         }
+        _selectedItemsForDelete.value = emptySet()
+        _mode.value = OperationMode.IDLE
     }
 
-    fun addAccount(name: String) {
+    fun addAccount(name: String, iconName: String = "") {
         viewModelScope.launch(Dispatchers.IO) {
             repository.insertAccount(name)
+            if (iconName.isNotBlank()) {
+                userPreferences.setCategoryIcon(name, iconName)
+            }
         }
     }
 
-    fun editAccount(oldName: String, newName: String) {
+    fun editAccount(oldName: String, newName: String, iconName: String = "") {
         viewModelScope.launch(Dispatchers.IO) {
             val accounts = repository.getAccounts().first()
             val match = accounts.firstOrNull { it.name == oldName }
             if (match != null) {
                 repository.updateAccount(match.copy(name = newName))
+            }
+            if (iconName.isNotBlank()) {
+                userPreferences.setCategoryIcon(newName, iconName)
             }
         }
     }
@@ -272,18 +300,17 @@ class ManageViewModel @Inject constructor(
 
 /** Resuelve el icono para un nombre de categoría conocido; usa Folder para las personalizadas. */
 private fun iconResForCategory(name: String): Int = when (name) {
-    "Food"          -> LucideR.drawable.lucide_ic_soup
-    "Restaurants"   -> LucideR.drawable.lucide_ic_soup
+    "Food", "Restaurants" -> LucideR.drawable.lucide_ic_soup
     "Groceries"     -> LucideR.drawable.lucide_ic_shopping_cart
     "House"         -> LucideR.drawable.lucide_ic_house
     "Utilities"     -> LucideR.drawable.lucide_ic_zap
     "Transport"     -> LucideR.drawable.lucide_ic_train_front
-    "Health"        -> LucideR.drawable.lucide_ic_heart_pulse
+    "Health"        -> LucideR.drawable.lucide_ic_heart
     "Entertainment" -> LucideR.drawable.lucide_ic_ticket
-    "Subscriptions" -> LucideR.drawable.lucide_ic_repeat
+    "Subscriptions" -> LucideR.drawable.lucide_ic_ticket
     "Gaming"        -> LucideR.drawable.lucide_ic_gamepad_2
     "Shopping"      -> LucideR.drawable.lucide_ic_shopping_bag
-    "Education"     -> LucideR.drawable.lucide_ic_book_open
+    "Education"     -> LucideR.drawable.lucide_ic_graduation_cap
     "Travel"        -> LucideR.drawable.lucide_ic_plane
     else            -> LucideR.drawable.lucide_ic_folder_code
 }

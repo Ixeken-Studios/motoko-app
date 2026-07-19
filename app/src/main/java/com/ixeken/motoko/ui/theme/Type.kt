@@ -16,7 +16,10 @@ enum class AppFontType {
     SPACE_MONO,
     SPACE_GROTESK,
     DM_SANS,
-    INTER
+    INTER,
+    DARUMA_DROP_ONE,
+    DELA_GOTHIC_ONE,
+    DOTGOTHIC16
 }
 
 /**
@@ -41,6 +44,18 @@ object AppFontProvider {
             AppFontType.INTER -> FontFamily(
                 Font(resId = R.font.inter_bold, weight = FontWeight.Bold),
                 Font(resId = R.font.inter_bold, weight = FontWeight.Normal)
+            )
+            AppFontType.DARUMA_DROP_ONE -> FontFamily(
+                Font(resId = R.font.darumadrop_one, weight = FontWeight.Bold),
+                Font(resId = R.font.darumadrop_one, weight = FontWeight.Normal)
+            )
+            AppFontType.DELA_GOTHIC_ONE -> FontFamily(
+                Font(resId = R.font.dela_gothic_one, weight = FontWeight.Bold),
+                Font(resId = R.font.dela_gothic_one, weight = FontWeight.Normal)
+            )
+            AppFontType.DOTGOTHIC16 -> FontFamily(
+                Font(resId = R.font.dotgothic16, weight = FontWeight.Bold),
+                Font(resId = R.font.dotgothic16, weight = FontWeight.Normal)
             )
         }
     }

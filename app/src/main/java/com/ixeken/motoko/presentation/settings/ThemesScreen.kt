@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -70,7 +73,7 @@ fun ThemesHeaderContent(
             Spacer(modifier = Modifier.width(16.dp))
 
             Text(
-                text = stringResource(id = R.string.themes_title),
+                text = stringResource(id = R.string.settings_themes_title),
                 fontFamily = SpaceMonoBoldFamily,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
@@ -108,17 +111,29 @@ fun ThemesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                ThemeOptionNavigationCard(
-                    iconResId = LucideR.drawable.lucide_ic_paintbrush,
-                    title = stringResource(id = R.string.theme_mode_title),
-                    subtext = stringResource(id = R.string.theme_mode_desc),
-                    onClick = { showThemeSelectionDialog = true }
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        ThemeOptionNavigationRow(
+                            iconResId = LucideR.drawable.lucide_ic_paintbrush,
+                            title = stringResource(id = R.string.theme_mode_title),
+                            subtext = stringResource(id = R.string.theme_mode_desc),
+                            onClick = { showThemeSelectionDialog = true }
+                        )
+                    }
+                }
             }
 
             item {
                 Text(
-                    text = stringResource(id = R.string.settings_sec_appearance),
+                    text = stringResource(id = R.string.themes_sec_visuals),
                     fontFamily = SpaceMonoBoldFamily,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -132,107 +147,123 @@ fun ThemesScreen(
             item {
                 val activeColor = if (state.coloredElementsEnabled) LocalMotokoColors.current.colorIncome else MaterialTheme.colorScheme.onSurface
                 val inactiveColor = if (state.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color(0xFFD1D5DB)
-                ThemeOptionSwitchCard(
-                    iconResId = LucideR.drawable.lucide_ic_sparkles,
-                    title = stringResource(id = R.string.toggle_colored_elements_title),
-                    subtext = stringResource(id = R.string.toggle_colored_elements_desc),
-                    checked = state.coloredElementsEnabled,
-                    activeColor = activeColor,
-                    inactiveColor = inactiveColor,
-                    onCheckedChange = { viewModel.setColoredElements(it) }
-                )
-            }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        ThemeOptionSwitchRow(
+                            iconResId = LucideR.drawable.lucide_ic_sparkles,
+                            title = stringResource(id = R.string.toggle_colored_elements_title),
+                            subtext = stringResource(id = R.string.toggle_colored_elements_desc),
+                            checked = state.coloredElementsEnabled,
+                            activeColor = activeColor,
+                            inactiveColor = inactiveColor,
+                            onCheckedChange = { viewModel.setColoredElements(it) }
+                        )
+                        
+                        val lineColor = LocalMotokoColors.current.colorLines
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(26.dp)
+                        ) {
+                            val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                            drawLine(
+                                color = lineColor,
+                                start = Offset(0f, size.height / 2),
+                                end = Offset(size.width, size.height / 2),
+                                pathEffect = pathEffect,
+                                strokeWidth = 2f
+                            )
+                        }
 
-
-            item {
-                val activeColor = if (state.coloredElementsEnabled) LocalMotokoColors.current.colorIncome else MaterialTheme.colorScheme.onSurface
-                val inactiveColor = if (state.coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color(0xFFD1D5DB)
-                ThemeOptionSwitchCard(
-                    iconResId = LucideR.drawable.lucide_ic_sparkles,
-                    title = stringResource(id = R.string.settings_animations_title),
-                    subtext = stringResource(id = R.string.settings_animations_desc),
-                    checked = state.animationsEnabled,
-                    activeColor = activeColor,
-                    inactiveColor = inactiveColor,
-                    onCheckedChange = { viewModel.setAnimationsEnabled(it) }
-                )
+                        ThemeOptionSwitchRow(
+                            iconResId = LucideR.drawable.lucide_ic_sparkles,
+                            title = stringResource(id = R.string.settings_animations_title),
+                            subtext = stringResource(id = R.string.settings_animations_desc),
+                            checked = state.animationsEnabled,
+                            activeColor = activeColor,
+                            inactiveColor = inactiveColor,
+                            onCheckedChange = { viewModel.setAnimationsEnabled(it) }
+                        )
+                    }
+                }
             }
         }
     }
 
     if (showThemeSelectionDialog) {
-        ThemeSelectionDialog(
+        ThemeSelectionBottomSheet(
             currentMode = state.themeMode,
             onModeSelected = { viewModel.setThemeMode(it) },
-            onDismiss = { showThemeSelectionDialog = false }
+            onDismissRequest = { showThemeSelectionDialog = false }
         )
     }
 }
 
 @Composable
-private fun ThemeOptionNavigationCard(
+private fun ThemeOptionNavigationRow(
     iconResId: Int,
     title: String,
     subtext: String,
     onClick: () -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(48.dp)
+                .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(16.dp))
-                    .clip(RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = iconResId),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontFamily = SpaceMonoBoldFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtext,
-                    fontFamily = SpaceMonoBoldFamily,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = LocalMotokoColors.current.textMuted
-                )
-            }
             Icon(
-                painter = painterResource(id = LucideR.drawable.lucide_ic_chevron_right),
+                painter = painterResource(id = iconResId),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(20.dp)
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
             )
         }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontFamily = SpaceMonoBoldFamily,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtext,
+                fontFamily = SpaceMonoBoldFamily,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Normal,
+                color = LocalMotokoColors.current.textMuted
+            )
+        }
+        Icon(
+            painter = painterResource(id = LucideR.drawable.lucide_ic_chevron_right),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
 @Composable
-private fun ThemeOptionSwitchCard(
+private fun ThemeOptionSwitchRow(
     iconResId: Int,
     title: String,
     subtext: String,
@@ -242,61 +273,60 @@ private fun ThemeOptionSwitchCard(
     onCheckedChange: (Boolean) -> Unit = {}
 ) {
     var isChecked by remember(checked) { mutableStateOf(checked) }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val next = !isChecked
+                isChecked = next
+                onCheckedChange(next)
+            }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(48.dp)
+                .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(16.dp))
-                    .clip(RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = iconResId),
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontFamily = SpaceMonoBoldFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = subtext,
-                    fontFamily = SpaceMonoBoldFamily,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = LocalMotokoColors.current.textMuted
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            ThemesCustomSwitch(
-                checked = isChecked,
-                activeColor = activeColor,
-                inactiveColor = inactiveColor,
-                modifier = Modifier.clickable {
-                    val next = !isChecked
-                    isChecked = next
-                    onCheckedChange(next)
-                }
+            Icon(
+                painter = painterResource(id = iconResId),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
             )
         }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontFamily = SpaceMonoBoldFamily,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtext,
+                fontFamily = SpaceMonoBoldFamily,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Normal,
+                color = LocalMotokoColors.current.textMuted
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        ThemesCustomSwitch(
+            checked = isChecked,
+            activeColor = activeColor,
+            inactiveColor = inactiveColor,
+            modifier = Modifier.clickable {
+                val next = !isChecked
+                isChecked = next
+                onCheckedChange(next)
+            }
+        )
     }
 }
 

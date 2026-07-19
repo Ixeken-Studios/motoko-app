@@ -34,18 +34,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.graphics.graphicsLayer
+import com.ixeken.motoko.ui.theme.LocalAnimationsEnabled
+import com.ixeken.motoko.ui.theme.MotokoAnimation
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import com.composables.icons.lucide.R
 import com.ixeken.motoko.R as AppR
 import com.ixeken.motoko.ui.theme.LocalMotokoColors
-import com.ixeken.motoko.ui.theme.MotokoAnimation
+import com.ixeken.motoko.data.local.resolveWalletName
 
 // ---------------------------------------------------------------------------
 // Modelos de datos estáticos para la maquetación visual de prueba
@@ -119,6 +130,7 @@ fun HistoryScreen(
     coloredElementsEnabled: Boolean,
     currencySymbol: String,
     swipeToDeleteEnabled: Boolean = true,
+    walletsList: List<String> = emptyList(),
     onSwipeDelete: (transactionId: Long) -> Unit = {},
     onTransactionClick: (id: Long, name: String, amount: String, type: com.ixeken.motoko.presentation.newitem.ItemType, wallet: String, category: String, date: String, note: String, account: String, iconName: String, receiptPath: String) -> Unit,
     modifier: Modifier = Modifier
@@ -221,127 +233,188 @@ fun HistoryScreen(
                     )
                 }
 
-                // Cada transacción como item individual con SwipeToDismissBox
-                items(
-                    group.items,
-                    key = { it.domainTransaction?.id ?: (it.nameStr ?: it.nameRes.toString()) + "_" + it.amount + "_" + it.type.name }
-                ) { item: HistoryItem ->
+                // Toda la lista de transacciones de esta fecha agrupada en una sola Card (estilo ticket)
+                item(key = "card_${group.dateText}") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            group.items.forEachIndexed { index, item ->
+                                var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-                    // Estado local por ítem para el diálogo de confirmación de borrado
-                    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+                                val isSwipeAllowedForItem = swipeToDeleteEnabled && item.categoryStr?.equals("Subscriptions", ignoreCase = true) != true
+                                val itemKey = item.domainTransaction?.id ?: item.nameRes
 
-                    Box(modifier = Modifier.animateItem(placementSpec = MotokoAnimation.screenSpec())) {
-                        val isSwipeAllowedForItem = swipeToDeleteEnabled && item.categoryStr?.equals("Subscriptions", ignoreCase = true) != true
-                        if (isSwipeAllowedForItem) {
-                            val dismissState = rememberSwipeToDismissBoxState(
-                                positionalThreshold = { it * 0.4f }
-                            )
-
-                            // Detecta cuando el gesto completa el umbral y muestra el diálogo
-                            LaunchedEffect(dismissState.currentValue) {
-                                if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-                                    showDeleteConfirmDialog = true
-                                    dismissState.reset() // el ítem regresa mientras el diálogo está abierto
+                                val animState = remember(itemKey) { Animatable(0f) }
+                                val animationsEnabled = LocalAnimationsEnabled.current
+                                val animSpec = MotokoAnimation.screenSpec<Float>()
+                                LaunchedEffect(itemKey) {
+                                    if (animationsEnabled) {
+                                        kotlinx.coroutines.delay(index * 40L)
+                                    }
+                                    animState.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = animSpec
+                                    )
                                 }
-                            }
 
-                            SwipeToDismissBox(
-                                state = dismissState,
-                                enableDismissFromStartToEnd = false,
-                                enableDismissFromEndToStart = true,
-                                backgroundContent = {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                LocalMotokoColors.current.colorExpense,
-                                                RoundedCornerShape(16.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer {
+                                            alpha = animState.value
+                                            translationY = (1f - animState.value) * 40f
+                                        }
+                                ) {
+                                    if (isSwipeAllowedForItem) {
+                                        val coroutineScope = rememberCoroutineScope()
+                                        val dismissState = rememberSwipeToDismissBoxState(
+                                            positionalThreshold = { it * 0.4f },
+                                            confirmValueChange = { value ->
+                                                if (value == SwipeToDismissBoxValue.EndToStart) {
+                                                    showDeleteConfirmDialog = true
+                                                    false
+                                                } else {
+                                                    false
+                                                }
+                                            }
+                                        )
+
+                                        SwipeToDismissBox(
+                                            state = dismissState,
+                                            enableDismissFromStartToEnd = false,
+                                            enableDismissFromEndToStart = true,
+                                            backgroundContent = {
+                                                if (dismissState.targetValue != SwipeToDismissBoxValue.Settled || dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .background(
+                                                                if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else LocalMotokoColors.current.primaryDark,
+                                                                RoundedCornerShape(12.dp)
+                                                            )
+                                                            .padding(end = 16.dp),
+                                                        contentAlignment = Alignment.CenterEnd
+                                                    ) {
+                                                        Icon(
+                                                            painter = painterResource(id = R.drawable.lucide_ic_trash_2),
+                                                            contentDescription = stringResource(id = AppR.string.desc_history_clear),
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(24.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            HistoryTransactionRow(
+                                                item = item,
+                                                isPrivacyEnabled = isPrivacyEnabled,
+                                                dateText = group.dateText,
+                                                coloredElementsEnabled = coloredElementsEnabled,
+                                                currencySymbol = currencySymbol,
+                                                walletsList = walletsList,
+                                                onTransactionClick = onTransactionClick
                                             )
-                                            .padding(end = 16.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.lucide_ic_trash_2),
-                                            contentDescription = stringResource(id = AppR.string.desc_history_clear),
-                                            tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
+                                        }
+
+                                        if (showDeleteConfirmDialog) {
+                                            AlertDialog(
+                                                onDismissRequest = {
+                                                    showDeleteConfirmDialog = false
+                                                    coroutineScope.launch { dismissState.reset() }
+                                                },
+                                                title = {
+                                                    Text(
+                                                        text = stringResource(AppR.string.swipe_delete_confirm_title),
+                                                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
+                                                        fontSize = 18.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = LocalMotokoColors.current.textPrimary
+                                                    )
+                                                },
+                                                text = {
+                                                    Text(
+                                                        text = stringResource(AppR.string.swipe_delete_confirm_message),
+                                                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
+                                                        fontSize = 14.sp,
+                                                        color = LocalMotokoColors.current.textMuted
+                                                    )
+                                                },
+                                                confirmButton = {
+                                                    TextButton(
+                                                        onClick = {
+                                                            showDeleteConfirmDialog = false
+                                                            coroutineScope.launch { dismissState.reset() }
+                                                            item.domainTransaction?.let { tx ->
+                                                                onSwipeDelete(tx.id)
+                                                            }
+                                                        }
+                                                    ) {
+                                                        Text(
+                                                            text = stringResource(AppR.string.btn_yes),
+                                                            fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(
+                                                        onClick = {
+                                                            showDeleteConfirmDialog = false
+                                                            coroutineScope.launch { dismissState.reset() }
+                                                        }
+                                                    ) {
+                                                        Text(
+                                                            text = stringResource(AppR.string.btn_no),
+                                                            fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = LocalMotokoColors.current.textPrimary
+                                                        )
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(16.dp),
+                                                containerColor = LocalMotokoColors.current.surfaceCard
+                                            )
+                                        }
+                                    } else {
+                                        HistoryTransactionRow(
+                                            item = item,
+                                            isPrivacyEnabled = isPrivacyEnabled,
+                                            dateText = group.dateText,
+                                            coloredElementsEnabled = coloredElementsEnabled,
+                                            currencySymbol = currencySymbol,
+                                            walletsList = walletsList,
+                                            onTransactionClick = onTransactionClick
                                         )
                                     }
                                 }
-                            ) {
-                                TransactionCard(
-                                    item = item,
-                                    isPrivacyEnabled = isPrivacyEnabled,
-                                    dateText = group.dateText,
-                                    coloredElementsEnabled = coloredElementsEnabled,
-                                    currencySymbol = currencySymbol,
-                                    onTransactionClick = onTransactionClick
-                                )
-                            }
-                        } else {
-                            // Swipe desactivado: se muestra la card directamente sin SwipeToDismissBox
-                            TransactionCard(
-                                item = item,
-                                isPrivacyEnabled = isPrivacyEnabled,
-                                dateText = group.dateText,
-                                coloredElementsEnabled = coloredElementsEnabled,
-                                currencySymbol = currencySymbol,
-                                onTransactionClick = onTransactionClick
-                            )
-                        }
-                    }
 
-                    // Diálogo de confirmación de borrado (compartido entre swipe y futuras acciones)
-                    if (showDeleteConfirmDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showDeleteConfirmDialog = false },
-                            title = {
-                                Text(
-                                    text = stringResource(AppR.string.swipe_delete_confirm_title),
-                                    fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = LocalMotokoColors.current.textPrimary
-                                )
-                            },
-                            text = {
-                                Text(
-                                    text = stringResource(AppR.string.swipe_delete_confirm_message),
-                                    fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                                    fontSize = 14.sp,
-                                    color = LocalMotokoColors.current.textMuted
-                                )
-                            },
-                            confirmButton = {
-                                TextButton(
-                                    onClick = {
-                                        showDeleteConfirmDialog = false
-                                        item.domainTransaction?.let { tx ->
-                                            onSwipeDelete(tx.id)
-                                        }
+                                if (index < group.items.lastIndex) {
+                                    val lineColor = LocalMotokoColors.current.colorLines
+                                    Canvas(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(26.dp)
+                                    ) {
+                                        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                                        drawLine(
+                                            color = lineColor,
+                                            start = Offset(0f, size.height / 2),
+                                            end = Offset(size.width, size.height / 2),
+                                            pathEffect = pathEffect,
+                                            strokeWidth = 2f
+                                        )
                                     }
-                                ) {
-                                    Text(
-                                        text = stringResource(AppR.string.btn_yes),
-                                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        color = LocalMotokoColors.current.colorExpense
-                                    )
                                 }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                                    Text(
-                                        text = stringResource(AppR.string.btn_no),
-                                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        color = LocalMotokoColors.current.textPrimary
-                                    )
-                                }
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = LocalMotokoColors.current.surfaceCard
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -353,37 +426,7 @@ fun HistoryScreen(
 // Componentes internos del contenido scrollable
 // ---------------------------------------------------------------------------
 
-/**
- * Card de transacción reutilizable. Usada tanto con SwipeToDismissBox como sin él.
- */
-@Composable
-private fun TransactionCard(
-    item: HistoryItem,
-    isPrivacyEnabled: Boolean,
-    dateText: String,
-    coloredElementsEnabled: Boolean,
-    currencySymbol: String,
-    onTransactionClick: (id: Long, name: String, amount: String, type: com.ixeken.motoko.presentation.newitem.ItemType, wallet: String, category: String, date: String, note: String, account: String, iconName: String, receiptPath: String) -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = LocalMotokoColors.current.surfaceCard
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            HistoryTransactionRow(
-                item = item,
-                isPrivacyEnabled = isPrivacyEnabled,
-                dateText = dateText,
-                coloredElementsEnabled = coloredElementsEnabled,
-                currencySymbol = currencySymbol,
-                onTransactionClick = onTransactionClick
-            )
-        }
-    }
-}
+
 
 /**
  * Fila individual de transacción: icono oscuro 48dp, nombre, categoría,
@@ -396,6 +439,7 @@ private fun HistoryTransactionRow(
     dateText: String,
     coloredElementsEnabled: Boolean,
     currencySymbol: String,
+    walletsList: List<String> = emptyList(),
     onTransactionClick: (id: Long, name: String, amount: String, type: com.ixeken.motoko.presentation.newitem.ItemType, wallet: String, category: String, date: String, note: String, account: String, iconName: String, receiptPath: String) -> Unit
 ) {
     val amountText = if (isPrivacyEnabled) {
@@ -414,15 +458,12 @@ private fun HistoryTransactionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(LocalMotokoColors.current.surfaceCard)
             .clickable {
                 val resolvedName = item.nameStr ?: context.getString(item.nameRes)
                 val resolvedCategory = item.categoryStr ?: context.getString(item.categoryRes)
-                val resolvedWallet = when (item.domainTransaction?.wallet) {
-                    com.ixeken.motoko.data.local.WalletType.CASH -> "Cash"
-                    com.ixeken.motoko.data.local.WalletType.SAVINGS -> "Savings"
-                    com.ixeken.motoko.data.local.WalletType.BANK -> "Debit Card"
-                    null -> if (item.type == TxType.INCOME) "Cash" else "Debit Card"
-                }
+                val resolvedWallet = resolveWalletName(item.domainTransaction?.wallet, walletsList, context)
                 val resolvedAccount = item.domainTransaction?.accountId?.toString() ?: context.getString(AppR.string.sub_bottom_sheet_account_personal)
                 val mappedType = if (item.type == TxType.INCOME) {
                     com.ixeken.motoko.presentation.newitem.ItemType.INCOME
@@ -468,7 +509,8 @@ private fun HistoryTransactionRow(
                     iconName,
                     receiptPath
                 )
-            },
+            }
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -490,6 +532,8 @@ private fun HistoryTransactionRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.nameStr ?: stringResource(id = item.nameRes),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -497,6 +541,8 @@ private fun HistoryTransactionRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = item.categoryStr ?: stringResource(id = item.categoryRes),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Normal,
                 color = LocalMotokoColors.current.textMuted
@@ -506,6 +552,8 @@ private fun HistoryTransactionRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = amountText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = amountColor

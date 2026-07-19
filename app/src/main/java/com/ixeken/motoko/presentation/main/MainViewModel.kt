@@ -30,6 +30,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 
+sealed interface UpdateResult {
+    data object UpToDate : UpdateResult
+    data class NewVersion(val version: String, val downloadUrl: String, val changelog: String?) : UpdateResult
+    data object FutureVersion : UpdateResult
+    data object Error : UpdateResult
+}
+
 /**
  * ViewModel encargado de orquestar el estado de la pantalla principal, cabecera superior y barra de pestañas.
  */
@@ -262,73 +269,120 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun clearUpdateState() {
-        updateAvailableVersion = null
-        updateHtmlUrl = null
+    var updateResultState by mutableStateOf<UpdateResult?>(null)
+        private set
+    var isCheckingUpdates by mutableStateOf(false)
+        private set
+    var showInternetConfirmDialog by mutableStateOf(false)
+    var showUpdateDialog by mutableStateOf(false)
+
+    fun clearUpdateResult() {
+        updateResultState = null
+        showUpdateDialog = false
     }
 
-    fun checkForUpdates(context: Context, manual: Boolean) {
-        if (!manual && hasCheckedUpdatesThisSession) return
+    fun checkUpdatesManual(context: Context) {
+        viewModelScope.launch {
+            isCheckingUpdates = true
+            showUpdateDialog = true
+            updateResultState = null
+            val result = performGitHubUpdateCheck(context)
+            updateResultState = result
+            isCheckingUpdates = false
+        }
+    }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (!manual) {
-                    val isAutoEnabled = preferences.checkUpdateOnStart.first()
-                    if (!isAutoEnabled) return@launch
-                }
-                hasCheckedUpdatesThisSession = true
-                val url = java.net.URL("https://api.github.com/repos/Ixeken-Studios/motoko-app/releases/latest")
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
-                connection.setRequestProperty("User-Agent", "Motoko-App")
-
-                if (connection.responseCode == 200) {
-                    val jsonStr = connection.inputStream.bufferedReader().use { it.readText() }
-                    val json = org.json.JSONObject(jsonStr)
-                    val rawTagName = json.getString("tag_name")
-                    val htmlUrl = json.getString("html_url")
-
-                    val latestVersion = rawTagName.trim().lowercase().removePrefix("v")
-                    val currentVersion = context.getString(R.string.settings_motoko_version).trim().lowercase().removePrefix("v")
-
-                    val isNewer = isVersionNewer(currentVersion, latestVersion)
-
-                    if (isNewer) {
-                        withContext(Dispatchers.Main) {
-                            updateAvailableVersion = rawTagName
-                            updateHtmlUrl = htmlUrl
-                        }
-                    } else if (manual) {
-                        _updateMessage.send(context.getString(R.string.update_already_latest))
-                    }
-                } else {
-                    if (manual) {
-                        _updateMessage.send(context.getString(R.string.update_check_failed))
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                if (manual) {
-                    _updateMessage.send(context.getString(R.string.update_check_network_error))
-                }
+    fun checkUpdatesOnStartup(context: Context) {
+        if (hasCheckedUpdatesThisSession) return
+        hasCheckedUpdatesThisSession = true
+        viewModelScope.launch {
+            val isAutoEnabled = preferences.checkUpdateOnStart.first()
+            if (!isAutoEnabled) return@launch
+            val result = performGitHubUpdateCheck(context)
+            if (result is UpdateResult.NewVersion) {
+                updateResultState = result
+                showUpdateDialog = true
             }
         }
     }
 
-    private fun isVersionNewer(current: String, latest: String): Boolean {
-        val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+    private suspend fun performGitHubUpdateCheck(context: Context): UpdateResult =
+        withContext(Dispatchers.IO) {
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                val url = java.net.URL("https://api.github.com/repos/Ixeken-Studios/motoko-app/releases/latest")
+                connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                connection.setRequestProperty("User-Agent", "Motoko-App")
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+
+                if (connection.responseCode == 200) {
+                    val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(responseText)
+                    val tagName = json.optString("tag_name", "")
+                    val htmlUrl = json.optString("html_url", "")
+                    val body = if (json.has("body") && !json.isNull("body")) json.getString("body") else null
+
+                    var apkUrl = htmlUrl
+                    if (json.has("assets") && !json.isNull("assets")) {
+                        val assetsArray = json.getJSONArray("assets")
+                        for (i in 0 until assetsArray.length()) {
+                            val assetObj = assetsArray.getJSONObject(i)
+                            val assetName = assetObj.optString("name", "")
+                            if (assetName.endsWith(".apk", ignoreCase = true)) {
+                                apkUrl = assetObj.optString("browser_download_url", htmlUrl)
+                                break
+                            }
+                        }
+                    }
+
+                    val currentVersion = try {
+                        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+                    } catch (e: Exception) {
+                        context.getString(R.string.settings_motoko_version).trim().removePrefix("v").removePrefix("V")
+                    }
+
+                    val comparison = compareVersions(currentVersion, tagName)
+                    if (comparison < 0) {
+                        UpdateResult.NewVersion(
+                            version = tagName,
+                            downloadUrl = apkUrl,
+                            changelog = body
+                        )
+                    } else if (comparison > 0) {
+                        UpdateResult.FutureVersion
+                    } else {
+                        UpdateResult.UpToDate
+                    }
+                } else {
+                    UpdateResult.Error
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                UpdateResult.Error
+            } finally {
+                connection?.disconnect()
+            }
+        }
+
+    private fun compareVersions(current: String, latest: String): Int {
+        val cleanCurrent = current.removePrefix("v").removePrefix("V").trim()
+        val cleanLatest = latest.removePrefix("v").removePrefix("V").trim()
+        if (cleanCurrent == cleanLatest) return 0
+
+        val currentParts = cleanCurrent.split(".").mapNotNull { it.toIntOrNull() }
+        val latestParts = cleanLatest.split(".").mapNotNull { it.toIntOrNull() }
+
         val length = maxOf(currentParts.size, latestParts.size)
         for (i in 0 until length) {
             val currVal = currentParts.getOrElse(i) { 0 }
             val latVal = latestParts.getOrElse(i) { 0 }
-            if (latVal > currVal) return true
-            if (currVal > latVal) return false
+            if (currVal > latVal) return 1
+            if (latVal > currVal) return -1
         }
-        return false
+        return 0
     }
 
     /**

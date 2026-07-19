@@ -4,12 +4,28 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.graphics.graphicsLayer
+import com.ixeken.motoko.ui.theme.LocalAnimationsEnabled
+import com.ixeken.motoko.ui.theme.MotokoAnimation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,11 +38,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.R as LucideR
 import com.ixeken.motoko.R
+import com.ixeken.motoko.presentation.responsiveWidth
 import com.ixeken.motoko.ui.theme.LocalMotokoColors
 
 // Targets for selection in manage screen
@@ -57,9 +75,16 @@ private val SpaceMonoBoldFamily: FontFamily?
 fun ManageScreen(
     viewModel: ManageViewModel,
     onBackClick: () -> Unit,
+    coloredElementsEnabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.setMode(OperationMode.IDLE)
+        }
+    }
 
     // State for bottom sheets
     var showBottomSheet by remember { mutableStateOf(false) }
@@ -85,12 +110,30 @@ fun ManageScreen(
         }
     }
 
+    val handleItemLongClick = { itemName: String ->
+        viewModel.setMode(OperationMode.EDIT)
+        editItemName = itemName
+        nameInput = itemName
+        if (uiState.activeTarget == ManageTarget.CATEGORY) {
+            val currentPair = uiState.categoriesList.find { it.first == itemName }
+            val matched = com.ixeken.motoko.presentation.curatedIcons.find { it.second == currentPair?.second }
+            selectedIconName = matched?.first ?: "Folder"
+        }
+        isEditAction = true
+        showBottomSheet = true
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(LocalMotokoColors.current.primaryLight)
+            .background(LocalMotokoColors.current.primaryLight),
+        contentAlignment = Alignment.TopCenter
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .responsiveWidth(720.dp)
+        ) {
             // Cabecera Oscura y Selección de Catálogo
             Surface(
                 color = LocalMotokoColors.current.primaryDark,
@@ -115,12 +158,23 @@ fun ManageScreen(
                                 .size(32.dp)
                                 .background(LocalMotokoColors.current.textOnDark, RoundedCornerShape(8.dp))
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onBackClick),
+                                .clickable {
+                                    if (uiState.mode != OperationMode.IDLE) {
+                                        viewModel.clearSelectedItemsForDelete()
+                                        viewModel.setMode(OperationMode.IDLE)
+                                    } else {
+                                        onBackClick()
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                painter = painterResource(id = LucideR.drawable.lucide_ic_arrow_left),
-                                contentDescription = stringResource(id = R.string.desc_back),
+                                painter = painterResource(
+                                    id = if (uiState.mode != OperationMode.IDLE) LucideR.drawable.lucide_ic_x
+                                         else LucideR.drawable.lucide_ic_arrow_left
+                                ),
+                                contentDescription = if (uiState.mode != OperationMode.IDLE) stringResource(id = R.string.manage_btn_cancel)
+                                                     else stringResource(id = R.string.desc_back),
                                 tint = LocalMotokoColors.current.primaryDark,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -129,35 +183,63 @@ fun ManageScreen(
                         Spacer(modifier = Modifier.width(16.dp))
 
                         Text(
-                            text = stringResource(id = R.string.manage_title),
+                            text = when (uiState.mode) {
+                                OperationMode.DELETE -> stringResource(id = R.string.manage_selected_count, uiState.selectedItemsForDelete.size)
+                                OperationMode.EDIT -> stringResource(id = R.string.manage_mode_editing)
+                                OperationMode.IDLE -> stringResource(id = R.string.settings_categories_title)
+                            },
                             fontFamily = SpaceMonoBoldFamily,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+
+                        if (uiState.mode == OperationMode.DELETE) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(LocalMotokoColors.current.textOnDark, RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        viewModel.executeDeleteSelected()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = LucideR.drawable.lucide_ic_trash_2),
+                                    contentDescription = stringResource(id = R.string.manage_mode_delete),
+                                    tint = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Row con tres botones segmentados equitativos
+                    // Row con tres botones segmentados equitativos con icono
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ManageSegmentButton(
                             text = stringResource(id = R.string.manage_tab_category),
+                            iconRes = LucideR.drawable.lucide_ic_layout_grid,
                             isActive = uiState.activeTarget == ManageTarget.CATEGORY,
                             onClick = { viewModel.setActiveTarget(ManageTarget.CATEGORY) },
                             modifier = Modifier.weight(1f)
                         )
                         ManageSegmentButton(
                             text = stringResource(id = R.string.manage_tab_wallet),
+                            iconRes = LucideR.drawable.lucide_ic_wallet,
                             isActive = uiState.activeTarget == ManageTarget.WALLET,
                             onClick = { viewModel.setActiveTarget(ManageTarget.WALLET) },
                             modifier = Modifier.weight(1f)
                         )
                         ManageSegmentButton(
                             text = stringResource(id = R.string.manage_tab_account),
+                            iconRes = LucideR.drawable.lucide_ic_user,
                             isActive = uiState.activeTarget == ManageTarget.ACCOUNT,
                             onClick = { viewModel.setActiveTarget(ManageTarget.ACCOUNT) },
                             modifier = Modifier.weight(1f)
@@ -187,12 +269,25 @@ fun ManageScreen(
                     colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(id = R.string.manage_mode_new),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = LucideR.drawable.lucide_ic_plus),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.manage_mode_new),
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -209,12 +304,25 @@ fun ManageScreen(
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(id = R.string.manage_mode_edit),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = LucideR.drawable.lucide_ic_pencil),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.manage_mode_edit),
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -227,39 +335,35 @@ fun ManageScreen(
                         },
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (uiState.mode == OperationMode.DELETE) LocalMotokoColors.current.colorExpense else LocalMotokoColors.current.primaryDark
+                        containerColor = if (uiState.mode == OperationMode.DELETE) {
+                            if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else LocalMotokoColors.current.primaryDark
+                        } else {
+                            LocalMotokoColors.current.primaryDark
+                        }
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(id = R.string.manage_mode_delete),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-
-            val groupedCategoryRows = remember(uiState.categoriesList) {
-                val result = mutableListOf<List<Pair<String, Int>>>()
-                var i = 0
-                while (i < uiState.categoriesList.size) {
-                    val current = uiState.categoriesList[i]
-                    if (current.first.length > 10) {
-                        result.add(listOf(current))
-                        i++
-                    } else {
-                        if (i + 1 < uiState.categoriesList.size && uiState.categoriesList[i + 1].first.length <= 10) {
-                            result.add(listOf(current, uiState.categoriesList[i + 1]))
-                            i += 2
-                        } else {
-                            result.add(listOf(current))
-                            i++
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = LucideR.drawable.lucide_ic_trash_2),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.manage_mode_delete),
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                            )
                         }
                     }
                 }
-                result
             }
 
             // Listado Dinámico
@@ -267,142 +371,73 @@ fun ManageScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 100.dp)
             ) {
-                when (uiState.activeTarget) {
-                    ManageTarget.CATEGORY -> {
-                        groupedCategoryRows.forEach { rowItems ->
-                            item {
-                                if (rowItems.size == 1) {
-                                    val cat = rowItems[0]
-                                    CategoryManageCard(
-                                        name = cat.first,
-                                        iconRes = cat.second,
-                                        isSelected = uiState.selectedItemsForDelete.contains(cat.first) && uiState.mode == OperationMode.DELETE,
-                                        onClick = { handleItemClick(cat.first) }
-                                    )
-                                } else {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        rowItems.forEach { cat ->
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                CategoryManageCard(
-                                                    name = cat.first,
-                                                    iconRes = cat.second,
-                                                    isSelected = uiState.selectedItemsForDelete.contains(cat.first) && uiState.mode == OperationMode.DELETE,
-                                                    onClick = { handleItemClick(cat.first) }
-                                                )
+                val listSize = when (uiState.activeTarget) {
+                    ManageTarget.CATEGORY -> uiState.categoriesList.size
+                    ManageTarget.WALLET -> uiState.walletsList.size
+                    ManageTarget.ACCOUNT -> uiState.accountsList.size
+                }
+
+                if (listSize > 0) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                when (uiState.activeTarget) {
+                                    ManageTarget.CATEGORY -> {
+                                        uiState.categoriesList.forEachIndexed { index, cat ->
+                                            CategoryManageRow(
+                                                name = cat.first,
+                                                iconRes = cat.second,
+                                                isSelected = uiState.selectedItemsForDelete.contains(cat.first) && uiState.mode == OperationMode.DELETE,
+                                                index = index,
+                                                onClick = { handleItemClick(cat.first) },
+                                                onLongClick = { handleItemLongClick(cat.first) }
+                                            )
+                                            if (index < uiState.categoriesList.lastIndex) {
+                                                ManageDashedDivider()
+                                            }
+                                        }
+                                    }
+                                    ManageTarget.WALLET -> {
+                                        uiState.walletsList.forEachIndexed { index, wallet ->
+                                            WalletManageRow(
+                                                name = wallet,
+                                                isSelected = uiState.selectedItemsForDelete.contains(wallet) && uiState.mode == OperationMode.DELETE,
+                                                index = index,
+                                                onClick = { handleItemClick(wallet) },
+                                                onLongClick = { handleItemLongClick(wallet) }
+                                            )
+                                            if (index < uiState.walletsList.lastIndex) {
+                                                ManageDashedDivider()
+                                            }
+                                        }
+                                    }
+                                    ManageTarget.ACCOUNT -> {
+                                        uiState.accountsList.forEachIndexed { index, account ->
+                                            AccountManageRow(
+                                                name = account,
+                                                isSelected = uiState.selectedItemsForDelete.contains(account) && uiState.mode == OperationMode.DELETE,
+                                                index = index,
+                                                onClick = { handleItemClick(account) },
+                                                onLongClick = { handleItemLongClick(account) }
+                                            )
+                                            if (index < uiState.accountsList.lastIndex) {
+                                                ManageDashedDivider()
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    ManageTarget.WALLET -> {
-                        uiState.walletsList.forEach { wallet ->
-                            item {
-                                WalletManageCard(
-                                    name = wallet,
-                                    isSelected = uiState.selectedItemsForDelete.contains(wallet) && uiState.mode == OperationMode.DELETE,
-                                    onClick = { handleItemClick(wallet) }
-                                )
-                            }
-                        }
-                    }
-                    ManageTarget.ACCOUNT -> {
-                        uiState.accountsList.forEach { account ->
-                            item {
-                                AccountManageCard(
-                                    name = account,
-                                    isSelected = uiState.selectedItemsForDelete.contains(account) && uiState.mode == OperationMode.DELETE,
-                                    onClick = { handleItemClick(account) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Lógica de Consolidación Inferior en base
-        if (uiState.mode == OperationMode.EDIT || uiState.mode == OperationMode.DELETE) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(60.dp)
-                        .clickable {
-                            viewModel.clearSelectedItemsForDelete()
-                        },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(id = R.string.manage_btn_cancel),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .weight(2f)
-                        .height(60.dp)
-                        .clickable {
-                            if (uiState.mode == OperationMode.DELETE) {
-                                when (uiState.activeTarget) {
-                                    ManageTarget.CATEGORY -> {
-                                        viewModel.deleteCategories(uiState.selectedItemsForDelete)
-                                        viewModel.clearSelectedItemsForDelete()
-                                    }
-                                    ManageTarget.WALLET -> {
-                                        viewModel.requestDeleteWallets(uiState.selectedItemsForDelete)
-                                    }
-                                    ManageTarget.ACCOUNT -> {
-                                        viewModel.requestDeleteAccounts(uiState.selectedItemsForDelete)
-                                    }
-                                }
-                            }
-                        },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = stringResource(id = R.string.manage_btn_save),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(
-                            painter = painterResource(id = LucideR.drawable.lucide_ic_save),
-                            contentDescription = stringResource(id = R.string.manage_btn_save),
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
                     }
                 }
             }
@@ -411,7 +446,32 @@ fun ManageScreen(
 
     // Modal de Creación y Edición Compartidos
     if (showBottomSheet) {
+        val scope = rememberCoroutineScope()
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+        val animateDismiss: (() -> Unit) -> Unit = { action ->
+            scope.launch {
+                sheetState.hide()
+            }.invokeOnCompletion {
+                if (!sheetState.isVisible) {
+                    action()
+                    showBottomSheet = false
+                    showIconPicker = false
+                }
+            }
+        }
+
+        val stopSheetSwipeConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource
+                ): Offset {
+                    return if (available.y > 0f) Offset(0f, available.y) else Offset.Zero
+                }
+            }
+        }
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -430,6 +490,10 @@ fun ManageScreen(
                     .verticalScroll(rememberScrollState())
                     .navigationBarsPadding()
                     .padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
+                    .nestedScroll(stopSheetSwipeConnection)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, _ -> }
+                    }
             ) {
                 val modalTitle = if (isEditAction) {
                     when (uiState.activeTarget) {
@@ -445,20 +509,106 @@ fun ManageScreen(
                     }
                 }
 
-                Text(
-                    text = modalTitle,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalMotokoColors.current.textPrimary,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = modalTitle,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LocalMotokoColors.current.textPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Botón Save (izq de X)
+                    Box(
+                        modifier = Modifier
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                if (nameInput.isNotEmpty()) {
+                                    animateDismiss {
+                                        if (isEditAction) {
+                                            // Edit
+                                            if (uiState.activeTarget == ManageTarget.CATEGORY) {
+                                                viewModel.editCategory(editItemName, nameInput, selectedIconName)
+                                            } else if (uiState.activeTarget == ManageTarget.WALLET) {
+                                                viewModel.editWallet(editItemName, nameInput, selectedIconName)
+                                            } else {
+                                                viewModel.editAccount(editItemName, nameInput, selectedIconName)
+                                            }
+                                            viewModel.setMode(OperationMode.IDLE)
+                                        } else {
+                                            // New
+                                            if (uiState.activeTarget == ManageTarget.CATEGORY) {
+                                                viewModel.addCategory(nameInput, selectedIconName)
+                                            } else if (uiState.activeTarget == ManageTarget.WALLET) {
+                                                viewModel.addWallet(nameInput, selectedIconName)
+                                            } else {
+                                                viewModel.addAccount(nameInput, selectedIconName)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    animateDismiss {}
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = LucideR.drawable.lucide_ic_save),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = stringResource(id = R.string.manage_btn_save),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Botón Close X (der)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(LocalMotokoColors.current.primaryDark, RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { animateDismiss {} },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = LucideR.drawable.lucide_ic_x),
+                            contentDescription = stringResource(id = R.string.manage_btn_cancel),
+                            tint = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
 
                 // Campo Name
                 Text(
                     text = "Name",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = LocalMotokoColors.current.textPrimary
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LocalMotokoColors.current.textPrimary
+                    )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -477,9 +627,11 @@ fun ManageScreen(
                         if (nameInput.isEmpty()) {
                             Text(
                                 text = "Name",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = LocalMotokoColors.current.textMuted
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = LocalMotokoColors.current.textMuted
+                                )
                             )
                         }
                         BasicTextField(
@@ -489,7 +641,8 @@ fun ManageScreen(
                             textStyle = TextStyle(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Normal,
-                                color = LocalMotokoColors.current.textOnDark
+                                color = LocalMotokoColors.current.textOnDark,
+                                fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
                             ),
                             cursorBrush = SolidColor(LocalMotokoColors.current.textOnDark),
                             modifier = Modifier.fillMaxWidth()
@@ -497,174 +650,63 @@ fun ManageScreen(
                     }
                 }
 
-                if (uiState.activeTarget == ManageTarget.CATEGORY) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Icon",
+                // Selección de Icono (Se despliega únicamente al pulsar)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(id = R.string.new_item_label_icon),
+                    style = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(LocalMotokoColors.current.activeTab)
-                            .clickable { showIconPicker = !showIconPicker },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (selectedIconName.isEmpty()) stringResource(id = R.string.manage_placeholder_select_icon) else selectedIconName,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = LocalMotokoColors.current.textOnDark,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 16.dp)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f)
-                                .background(LocalMotokoColors.current.textMuted),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = LucideR.drawable.lucide_ic_chevron_down),
-                                contentDescription = null,
-                                tint = LocalMotokoColors.current.textOnDark,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    if (showIconPicker) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        val icons = com.ixeken.motoko.presentation.curatedIcons
-                        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp)
-                        ) {
-                            items(icons.size) { index ->
-                                val (name, res) = icons[index]
-                                val isSelected = selectedIconName == name
-                                Box(
-                                    modifier = Modifier
-                                        .aspectRatio(1.5f)
-                                        .background(
-                                            color = if (isSelected) LocalMotokoColors.current.textMuted else LocalMotokoColors.current.primaryDark,
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            selectedIconName = name
-                                            showIconPicker = false
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = res),
-                                        contentDescription = name,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Bottom Buttons (Cancel & Save)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(LocalMotokoColors.current.activeTab)
+                        .clickable { showIconPicker = !showIconPicker }
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Card(
+                    Text(
+                        text = if (selectedIconName.isEmpty()) stringResource(id = R.string.manage_placeholder_select_icon) else selectedIconName,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = LocalMotokoColors.current.textOnDark
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable {
-                                showBottomSheet = false
-                                showIconPicker = false
-                            },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
+                            .size(32.dp)
+                            .background(LocalMotokoColors.current.primaryDark, shape = RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = stringResource(id = R.string.manage_btn_cancel),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = LocalMotokoColors.current.textOnDark
-                            )
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable {
-                                if (nameInput.isNotEmpty()) {
-                                    if (isEditAction) {
-                                        // Edit
-                                        if (uiState.activeTarget == ManageTarget.CATEGORY) {
-                                            viewModel.editCategory(editItemName, nameInput, selectedIconName)
-                                        } else if (uiState.activeTarget == ManageTarget.WALLET) {
-                                            viewModel.editWallet(editItemName, nameInput)
-                                        } else {
-                                            viewModel.editAccount(editItemName, nameInput)
-                                        }
-                                    } else {
-                                        // New
-                                        if (uiState.activeTarget == ManageTarget.CATEGORY) {
-                                            viewModel.addCategory(nameInput, selectedIconName)
-                                        } else if (uiState.activeTarget == ManageTarget.WALLET) {
-                                            viewModel.addWallet(nameInput)
-                                        } else {
-                                            viewModel.addAccount(nameInput)
-                                        }
-                                    }
-                                }
-                                showBottomSheet = false
-                                showIconPicker = false
-                            },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.primaryDark)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 20.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(
-                                text = stringResource(id = R.string.manage_btn_save),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = LocalMotokoColors.current.textOnDark
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Icon(
-                                painter = painterResource(id = LucideR.drawable.lucide_ic_save),
-                                contentDescription = null,
-                                tint = LocalMotokoColors.current.textOnDark,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            painter = painterResource(id = com.ixeken.motoko.presentation.newitem.getCategoryIconRes(selectedIconName)),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
+
+                if (showIconPicker) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    com.ixeken.motoko.presentation.newitem.IconTabContent(
+                        selectedIcon = selectedIconName,
+                        onIconSelect = {
+                            selectedIconName = it
+                            showIconPicker = false
+                        }
+                    )
+                }
+
+
             }
         }
     }
@@ -699,7 +741,7 @@ fun ManageScreen(
                         fontFamily = SpaceMonoBoldFamily,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = LocalMotokoColors.current.colorExpense
+                        color = if (coloredElementsEnabled) LocalMotokoColors.current.colorExpense else MaterialTheme.colorScheme.onSurface
                     )
                 }
             },
@@ -723,6 +765,7 @@ fun ManageScreen(
 @Composable
 private fun ManageSegmentButton(
     text: String,
+    iconRes: Int,
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -738,114 +781,256 @@ private fun ManageSegmentButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManageDashedDivider() {
+    val lineColor = LocalMotokoColors.current.colorLines
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(26.dp)
+    ) {
+        val pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+        drawLine(
+            color = lineColor,
+            start = Offset(0f, size.height / 2),
+            end = Offset(size.width, size.height / 2),
+            pathEffect = pathEffect,
+            strokeWidth = 2f
         )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CategoryManageCard(
+private fun CategoryManageRow(
     name: String,
     iconRes: Int,
     isSelected: Boolean,
-    onClick: () -> Unit
+    index: Int = 0,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    Card(
+    val animState = remember(name) { Animatable(0f) }
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val animSpec = MotokoAnimation.screenSpec<Float>()
+    LaunchedEffect(name) {
+        if (animationsEnabled) {
+            kotlinx.coroutines.delay(index * 30L)
+        }
+        animState.animateTo(
+            targetValue = 1f,
+            animationSpec = animSpec
+        )
+    }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard),
-        border = if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense) else null
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(LocalMotokoColors.current.primaryDark, shape = RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = iconRes),
-                    contentDescription = null,
-                    tint = LocalMotokoColors.current.textOnDark,
-                    modifier = Modifier.size(18.dp)
-                )
+            .graphicsLayer {
+                alpha = animState.value
+                translationY = (1f - animState.value) * 40f
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = LocalMotokoColors.current.textPrimary
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
             )
-        }
-    }
-}
-
-@Composable
-private fun WalletManageCard(
-    name: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard),
-        border = if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense) else null
+            .background(
+                if (isSelected) LocalMotokoColors.current.colorExpense.copy(alpha = 0.08f)
+                else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense)
+                else BorderStroke(0.dp, Color.Transparent),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            contentAlignment = Alignment.CenterStart
+                .size(36.dp)
+                .background(LocalMotokoColors.current.primaryDark, shape = RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = LocalMotokoColors.current.textPrimary
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = LocalMotokoColors.current.textOnDark,
+                modifier = Modifier.size(18.dp)
             )
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = name,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = LocalMotokoColors.current.textPrimary
+        )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AccountManageCard(
+private fun WalletManageRow(
     name: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    index: Int = 0,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    Card(
+    val animState = remember(name) { Animatable(0f) }
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val animSpec = MotokoAnimation.screenSpec<Float>()
+    LaunchedEffect(name) {
+        if (animationsEnabled) {
+            kotlinx.coroutines.delay(index * 30L)
+        }
+        animState.animateTo(
+            targetValue = 1f,
+            animationSpec = animSpec
+        )
+    }
+
+    val iconRes = com.ixeken.motoko.presentation.newitem.getWalletIconRes(name)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalMotokoColors.current.surfaceCard),
-        border = if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense) else null
+            .graphicsLayer {
+                alpha = animState.value
+                translationY = (1f - animState.value) * 40f
+            }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .background(
+                if (isSelected) LocalMotokoColors.current.colorExpense.copy(alpha = 0.08f)
+                else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense)
+                else BorderStroke(0.dp, Color.Transparent),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            contentAlignment = Alignment.CenterStart
+                .size(36.dp)
+                .background(LocalMotokoColors.current.primaryDark, shape = RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = LocalMotokoColors.current.textPrimary
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = LocalMotokoColors.current.textOnDark,
+                modifier = Modifier.size(18.dp)
             )
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = name,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = LocalMotokoColors.current.textPrimary
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AccountManageRow(
+    name: String,
+    isSelected: Boolean,
+    index: Int = 0,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val animState = remember(name) { Animatable(0f) }
+    val animationsEnabled = LocalAnimationsEnabled.current
+    val animSpec = MotokoAnimation.screenSpec<Float>()
+    LaunchedEffect(name) {
+        if (animationsEnabled) {
+            kotlinx.coroutines.delay(index * 30L)
+        }
+        animState.animateTo(
+            targetValue = 1f,
+            animationSpec = animSpec
+        )
+    }
+
+    val iconRes = com.ixeken.motoko.presentation.newitem.getAccountIconRes(name)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = animState.value
+                translationY = (1f - animState.value) * 40f
+            }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .background(
+                if (isSelected) LocalMotokoColors.current.colorExpense.copy(alpha = 0.08f)
+                else Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                if (isSelected) BorderStroke(1.dp, LocalMotokoColors.current.colorExpense)
+                else BorderStroke(0.dp, Color.Transparent),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(LocalMotokoColors.current.primaryDark, shape = RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+                tint = LocalMotokoColors.current.textOnDark,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = name,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = LocalMotokoColors.current.textPrimary
+        )
     }
 }

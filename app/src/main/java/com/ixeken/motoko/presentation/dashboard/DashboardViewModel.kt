@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -84,25 +85,42 @@ class DashboardViewModel @Inject constructor(
             }
         }
 
-    private val _selectedPeriod = MutableStateFlow(DashboardPeriod.DAY)
-
     /**
      * Devuelve el período de tiempo actualmente seleccionado.
      */
-    val selectedPeriod: StateFlow<DashboardPeriod> = _selectedPeriod.asStateFlow()
+    val selectedPeriod: StateFlow<DashboardPeriod> = preferences.dashboardPeriod
+        .map { name ->
+            runCatching { DashboardPeriod.valueOf(name) }.getOrDefault(DashboardPeriod.DAY)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = DashboardPeriod.DAY
+        )
 
     /**
      * Establece el nuevo período de tiempo para filtrar el Dashboard.
      */
     fun setPeriod(period: DashboardPeriod) {
-        _selectedPeriod.value = period
+        viewModelScope.launch {
+            preferences.setDashboardPeriod(period.name)
+        }
     }
 
-    private val _viewMode = MutableStateFlow(DashboardViewMode.LIST)
-    val viewMode: StateFlow<DashboardViewMode> = _viewMode.asStateFlow()
+    val viewMode: StateFlow<DashboardViewMode> = preferences.dashboardViewMode
+        .map { name ->
+            runCatching { DashboardViewMode.valueOf(name) }.getOrDefault(DashboardViewMode.LIST)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = DashboardViewMode.LIST
+        )
 
     fun setViewMode(mode: DashboardViewMode) {
-        _viewMode.value = mode
+        viewModelScope.launch {
+            preferences.setDashboardViewMode(mode.name)
+        }
     }
 
     private val _selectedWallet = MutableStateFlow("")
@@ -121,11 +139,14 @@ class DashboardViewModel @Inject constructor(
     ) { accountId, wallet ->
         Pair(accountId, wallet)
     }.flatMapLatest { (accountId, wallet) ->
-        val walletType = when (wallet.lowercase()) {
-            "cash", "efectivo" -> WalletType.CASH
-            "savings", "ahorros" -> WalletType.SAVINGS
-            "debit card", "tarjeta de débito", "débito", "debit" -> WalletType.BANK
-            else -> null
+        val walletType = if (wallet.isBlank()) {
+            null
+        } else {
+            when (wallet.lowercase()) {
+                "cash", "efectivo" -> WalletType.CASH
+                "savings", "ahorros" -> WalletType.SAVINGS
+                else -> WalletType.BANK
+            }
         }
         if (walletType != null) {
             repository.getBalanceByWallet(accountId, walletType)
@@ -136,7 +157,7 @@ class DashboardViewModel @Inject constructor(
 
     private val walletAndPeriodFlow: Flow<Pair<String, DashboardPeriod>> = combine(
         _selectedWallet,
-        _selectedPeriod
+        selectedPeriod
     ) { wallet, period ->
         Pair(wallet, period)
     }
@@ -188,32 +209,13 @@ class DashboardViewModel @Inject constructor(
                     }
                 }
 
-                val walletType = when (wallet.lowercase()) {
-                    "cash", "efectivo" -> WalletType.CASH
-                    "savings", "ahorros" -> WalletType.SAVINGS
-                    "debit card", "tarjeta de débito", "débito", "debit" -> WalletType.BANK
-                    else -> null
-                }
-
-                val walletFilteredAllTx = if (walletType != null) {
-                    allTx.filter { it.wallet == walletType }
-                } else {
-                    allTx
-                }
-
-                val walletFilteredLatestTx = if (walletType != null) {
-                    latestTx.filter { it.wallet == walletType }
-                } else {
-                    latestTx
-                }
-
-                val periodTx = walletFilteredAllTx.filter { it.timestamp >= startTime }
+                val periodTx = allTx.filter { it.timestamp >= startTime }
                 val income = periodTx.filter { it.isIncome }.sumOf { it.amount }
                 val expenses = periodTx.filter { !it.isIncome }.sumOf { it.amount }
-                
-                val balanceDate = if (walletFilteredLatestTx.isNotEmpty()) {
+
+                val balanceDate = if (latestTx.isNotEmpty()) {
                     val sdf = java.text.SimpleDateFormat("dd/MM", java.util.Locale.getDefault())
-                    sdf.format(java.util.Date(walletFilteredLatestTx.first().timestamp))
+                    sdf.format(java.util.Date(latestTx.first().timestamp))
                 } else {
                     "18/06"
                 }
@@ -231,7 +233,7 @@ class DashboardViewModel @Inject constructor(
                     balanceDate = balanceDate,
                     expensesAmount = expenses,
                     incomeAmount = income,
-                    recentTransactions = walletFilteredLatestTx.map { tx ->
+                    recentTransactions = latestTx.map { tx ->
                         val finalIcon = categoryIconsMap[tx.category] ?: tx.iconName
                         tx.copy(iconName = finalIcon)
                     },

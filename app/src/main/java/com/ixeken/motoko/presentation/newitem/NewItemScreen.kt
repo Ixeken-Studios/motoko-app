@@ -18,12 +18,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.composables.icons.lucide.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ixeken.motoko.R as AppR
+import com.ixeken.motoko.presentation.responsiveWidth
 import com.ixeken.motoko.ui.theme.LocalMotokoColors
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,12 +86,18 @@ fun NewItemScreen(
         }
     }
 
-    Column(
-        modifier = modifier
+    Box(
+        modifier = Modifier
             .fillMaxSize()
-            .background(LocalMotokoColors.current.primaryLight)
+            .background(LocalMotokoColors.current.primaryLight),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // 1. Cabecera Oscura y Selector Tripartito
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .responsiveWidth(600.dp)
+        ) {
+            // 1. Cabecera Oscura y Selector Tripartito
         Surface(
             color = LocalMotokoColors.current.primaryDark,
             shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
@@ -121,8 +132,13 @@ fun NewItemScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
+                    val headerTitleRes = when (uiState.selectedType) {
+                        ItemType.INCOME -> AppR.string.new_item_title_income
+                        ItemType.EXPENSE -> AppR.string.new_item_title_expense
+                        ItemType.SUBSCRIPTION -> AppR.string.new_item_title_subscription
+                    }
                     Text(
-                        text = stringResource(id = AppR.string.new_item_title),
+                        text = stringResource(id = headerTitleRes),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = LocalMotokoColors.current.textOnDark
@@ -143,6 +159,7 @@ fun NewItemScreen(
                             hasAttemptedSave = false
                             viewModel.onTypeSelected(ItemType.INCOME)
                         },
+                        iconRes = R.drawable.lucide_ic_arrow_down_left,
                         modifier = Modifier.weight(1f)
                     )
                     SegmentButton(
@@ -152,6 +169,7 @@ fun NewItemScreen(
                             hasAttemptedSave = false
                             viewModel.onTypeSelected(ItemType.EXPENSE)
                         },
+                        iconRes = R.drawable.lucide_ic_arrow_up_right,
                         modifier = Modifier.weight(1f)
                     )
                     SegmentButton(
@@ -161,6 +179,7 @@ fun NewItemScreen(
                             hasAttemptedSave = false
                             viewModel.onTypeSelected(ItemType.SUBSCRIPTION)
                         },
+                        iconRes = R.drawable.lucide_ic_repeat,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -189,39 +208,87 @@ fun NewItemScreen(
                         )
                     }
                     item {
-                        NewFormInput(
+                        AmountFormInput(
                             label = stringResource(id = AppR.string.new_item_label_amount),
                             value = uiState.amount,
                             onValueChange = { viewModel.onAmountChanged(it) },
-                            placeholder = "$currencySymbol - - -",
+                            currencySymbol = currencySymbol,
                             isError = hasAttemptedSave && (uiState.amount.isBlank() || (uiState.amount.toDoubleOrNull() ?: 0.0) <= 0.0),
                             required = true
                         )
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_wallet),
-                            value = uiState.wallet,
-                            onValueChange = { viewModel.onWalletChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                            isError = hasAttemptedSave && uiState.wallet.isBlank(),
-                            required = true,
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.WALLET
-                                showBottomSheet = true
-                            }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_icon),
+                                value = uiState.icon,
+                                onValueChange = { viewModel.onIconChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                iconRes = getCategoryIconRes(uiState.icon),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ICON
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_date),
+                                value = uiState.date,
+                                onValueChange = { viewModel.onDateChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                iconRes = R.drawable.lucide_ic_calendar,
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_date),
-                            value = uiState.date,
-                            onValueChange = { viewModel.onDateChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                            iconRes = R.drawable.lucide_ic_calendar,
-                            onClick = { showDatePicker = true }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_wallet),
+                                value = uiState.wallet,
+                                onValueChange = { viewModel.onWalletChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                isError = hasAttemptedSave && uiState.wallet.isBlank(),
+                                required = true,
+                                iconRes = getWalletIconRes(uiState.wallet),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.WALLET
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_account),
+                                value = uiState.account,
+                                onValueChange = { viewModel.onAccountChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                iconRes = getAccountIconRes(uiState.account),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ACCOUNT
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
                         NewFormInput(
@@ -229,32 +296,6 @@ fun NewItemScreen(
                             value = uiState.note,
                             onValueChange = { viewModel.onNoteChanged(it) },
                             placeholder = stringResource(id = AppR.string.new_item_placeholder_note)
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_icon),
-                            value = uiState.icon,
-                            onValueChange = { viewModel.onIconChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ICON
-                                showBottomSheet = true
-                            }
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_account),
-                            value = uiState.account,
-                            onValueChange = { viewModel.onAccountChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ACCOUNT
-                                showBottomSheet = true
-                            }
                         )
                     }
                 }
@@ -270,52 +311,111 @@ fun NewItemScreen(
                         )
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_amount),
-                            value = uiState.amount,
-                            onValueChange = { viewModel.onAmountChanged(it) },
-                            placeholder = "$currencySymbol - - -",
-                            isError = hasAttemptedSave && (uiState.amount.isBlank() || (uiState.amount.toDoubleOrNull() ?: 0.0) <= 0.0),
-                            required = true
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            AmountFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_amount),
+                                value = uiState.amount,
+                                onValueChange = { viewModel.onAmountChanged(it) },
+                                currencySymbol = currencySymbol,
+                                isError = hasAttemptedSave && (uiState.amount.isBlank() || (uiState.amount.toDoubleOrNull() ?: 0.0) <= 0.0),
+                                required = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_icon),
+                                value = uiState.icon,
+                                onValueChange = { viewModel.onIconChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                iconRes = getCategoryIconRes(uiState.icon),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ICON
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_category),
-                            value = uiState.category,
-                            onValueChange = { viewModel.onCategoryChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_category),
-                            iconRes = R.drawable.lucide_ic_layout_grid,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.CATEGORY
-                                showBottomSheet = true
-                            }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_category),
+                                value = uiState.category,
+                                onValueChange = { viewModel.onCategoryChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_category),
+                                iconRes = getCategoryIconRes(uiState.category),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.CATEGORY
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_date),
+                                value = uiState.date,
+                                onValueChange = { viewModel.onDateChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                iconRes = R.drawable.lucide_ic_calendar,
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_wallet),
-                            value = uiState.wallet,
-                            onValueChange = { viewModel.onWalletChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                            isError = hasAttemptedSave && uiState.wallet.isBlank(),
-                            required = true,
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.WALLET
-                                showBottomSheet = true
-                            }
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_date),
-                            value = uiState.date,
-                            onValueChange = { viewModel.onDateChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                            iconRes = R.drawable.lucide_ic_calendar,
-                            onClick = { showDatePicker = true }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_wallet),
+                                value = uiState.wallet,
+                                onValueChange = { viewModel.onWalletChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                isError = hasAttemptedSave && uiState.wallet.isBlank(),
+                                required = true,
+                                iconRes = getWalletIconRes(uiState.wallet),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.WALLET
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_account),
+                                value = uiState.account,
+                                onValueChange = { viewModel.onAccountChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                iconRes = getAccountIconRes(uiState.account),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ACCOUNT
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
                         NewFormInput(
@@ -342,32 +442,6 @@ fun NewItemScreen(
                             onClick = { showReceiptSourceDialog = true }
                         )
                     }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_icon),
-                            value = uiState.icon,
-                            onValueChange = { viewModel.onIconChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ICON
-                                showBottomSheet = true
-                            }
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_account),
-                            value = uiState.account,
-                            onValueChange = { viewModel.onAccountChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ACCOUNT
-                                showBottomSheet = true
-                            }
-                        )
-                    }
                 }
                 ItemType.SUBSCRIPTION -> {
                     item {
@@ -381,36 +455,110 @@ fun NewItemScreen(
                         )
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_amount),
-                            value = uiState.amount,
-                            onValueChange = { viewModel.onAmountChanged(it) },
-                            placeholder = "$currencySymbol - - -",
-                            isError = hasAttemptedSave && (uiState.amount.isBlank() || (uiState.amount.toDoubleOrNull() ?: 0.0) <= 0.0),
-                            required = true
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            AmountFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_amount),
+                                value = uiState.amount,
+                                onValueChange = { viewModel.onAmountChanged(it) },
+                                currencySymbol = currencySymbol,
+                                isError = hasAttemptedSave && (uiState.amount.isBlank() || (uiState.amount.toDoubleOrNull() ?: 0.0) <= 0.0),
+                                required = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_icon),
+                                value = uiState.icon,
+                                onValueChange = { viewModel.onIconChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
+                                iconRes = getCategoryIconRes(uiState.icon),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ICON
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_date),
-                            value = uiState.date,
-                            onValueChange = { viewModel.onDateChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
-                            iconRes = R.drawable.lucide_ic_calendar,
-                            onClick = { showDatePicker = true }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_date),
+                                value = uiState.date,
+                                onValueChange = { viewModel.onDateChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_date),
+                                iconRes = R.drawable.lucide_ic_calendar,
+                                onClick = { showDatePicker = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_billing_period),
+                                value = uiState.period,
+                                onValueChange = { viewModel.onPeriodChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_billing_period),
+                                iconRes = R.drawable.lucide_ic_chevron_down,
+                                onClick = {
+                                    showBillingDialog = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_billing_period),
-                            value = uiState.period,
-                            onValueChange = { viewModel.onPeriodChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_billing_period),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                showBillingDialog = true
-                            }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_wallet),
+                                value = uiState.wallet,
+                                onValueChange = { viewModel.onWalletChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
+                                isError = hasAttemptedSave && uiState.wallet.isBlank(),
+                                required = true,
+                                iconRes = getWalletIconRes(uiState.wallet),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.WALLET
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                            NewFormInput(
+                                label = stringResource(id = AppR.string.new_item_label_account),
+                                value = uiState.account,
+                                onValueChange = { viewModel.onAccountChanged(it) },
+                                placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
+                                iconRes = getAccountIconRes(uiState.account),
+                                onClick = {
+                                    bottomSheetTab = SelectorTab.ACCOUNT
+                                    showBottomSheet = true
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                            )
+                        }
                     }
                     item {
                         NewFormInput(
@@ -418,47 +566,6 @@ fun NewItemScreen(
                             value = uiState.note,
                             onValueChange = { viewModel.onNoteChanged(it) },
                             placeholder = stringResource(id = AppR.string.new_item_placeholder_note)
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_wallet),
-                            value = uiState.wallet,
-                            onValueChange = { viewModel.onWalletChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_wallet),
-                            isError = hasAttemptedSave && uiState.wallet.isBlank(),
-                            required = true,
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.WALLET
-                                showBottomSheet = true
-                            }
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_icon),
-                            value = uiState.icon,
-                            onValueChange = { viewModel.onIconChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_icon),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ICON
-                                showBottomSheet = true
-                            }
-                        )
-                    }
-                    item {
-                        NewFormInput(
-                            label = stringResource(id = AppR.string.new_item_label_account),
-                            value = uiState.account,
-                            onValueChange = { viewModel.onAccountChanged(it) },
-                            placeholder = stringResource(id = AppR.string.new_item_placeholder_account),
-                            iconRes = R.drawable.lucide_ic_chevron_down,
-                            onClick = {
-                                bottomSheetTab = SelectorTab.ACCOUNT
-                                showBottomSheet = true
-                            }
                         )
                     }
                 }
@@ -503,6 +610,7 @@ fun NewItemScreen(
                 }
             }
         }
+    }
 
         if (showBottomSheet) {
             val isExpenseMode = bottomSheetTab == SelectorTab.CATEGORY || (uiState.selectedType == ItemType.EXPENSE && bottomSheetTab != SelectorTab.WALLET)
@@ -712,12 +820,12 @@ fun NewItemScreen(
         }
     }
 }
-
 @Composable
 private fun SegmentButton(
     text: String,
     isActive: Boolean,
     onClick: () -> Unit,
+    iconRes: Int? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -731,28 +839,46 @@ private fun SegmentButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = LocalMotokoColors.current.textOnDark
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (iconRes != null) {
+                Icon(
+                    painter = painterResource(id = iconRes),
+                    contentDescription = null,
+                    tint = LocalMotokoColors.current.textOnDark,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = LocalMotokoColors.current.textOnDark
+            )
+        }
     }
 }
 
 @Composable
-private fun NewFormInput(
+private fun AmountFormInput(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String,
+    currencySymbol: String,
     isError: Boolean = false,
     required: Boolean = false,
-    iconRes: Int? = null,
-    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = label,
@@ -779,6 +905,102 @@ private fun NewFormInput(
                     if (isError) LocalMotokoColors.current.colorExpense.copy(alpha = 0.2f)
                     else LocalMotokoColors.current.activeTab
                 )
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = currencySymbol,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = LocalMotokoColors.current.textOnDark
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = "0",
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LocalMotokoColors.current.textMuted,
+                            textAlign = TextAlign.End
+                        )
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    textStyle = TextStyle(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LocalMotokoColors.current.textOnDark,
+                        textAlign = TextAlign.End,
+                        fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
+                    ),
+                    cursorBrush = SolidColor(LocalMotokoColors.current.textOnDark),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewFormInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    isError: Boolean = false,
+    required: Boolean = false,
+    iconRes: Int? = null,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isError) LocalMotokoColors.current.colorExpense else MaterialTheme.colorScheme.onBackground
+                )
+            )
+            if (required) {
+                Text(
+                    text = " *",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isError) LocalMotokoColors.current.colorExpense else LocalMotokoColors.current.textMuted
+                    )
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (isError) LocalMotokoColors.current.colorExpense.copy(alpha = 0.2f)
+                    else LocalMotokoColors.current.activeTab
+                )
                 .let { if (onClick != null) it.clickable(onClick = onClick) else it },
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -792,17 +1014,27 @@ private fun NewFormInput(
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = LocalMotokoColors.current.textMuted
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = LocalMotokoColors.current.textMuted
+                        )
                     )
                 }
                 if (onClick != null) {
                     Text(
                         text = value,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = LocalMotokoColors.current.textOnDark
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = LocalMotokoColors.current.textOnDark
+                        )
                     )
                 } else {
                     BasicTextField(
@@ -812,7 +1044,8 @@ private fun NewFormInput(
                         textStyle = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Normal,
-                            color = LocalMotokoColors.current.textOnDark
+                            color = LocalMotokoColors.current.textOnDark,
+                            fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
                         ),
                         cursorBrush = SolidColor(LocalMotokoColors.current.textOnDark),
                         modifier = Modifier.fillMaxWidth()

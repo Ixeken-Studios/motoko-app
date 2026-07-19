@@ -16,10 +16,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.getValue
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.Modifier
 
 enum class ThemeMode { LIGHT, DARK, DARK_OLIVE, SYSTEM }
 
@@ -33,38 +43,81 @@ val LocalFontScale = staticCompositionLocalOf { 1.0f }
 val AppTypography = getScaledTypography(AppFontType.SPACE_MONO, 1.0f)
 
 object MotokoAnimation {
-    val ScreenTransitionSpec: TweenSpec<Float>
+    val ScreenTransitionSpec: FiniteAnimationSpec<Float>
         @Composable
         get() = screenSpec()
 
-    val SheetTransitionSpec: TweenSpec<Float>
+    val SheetTransitionSpec: FiniteAnimationSpec<Float>
         @Composable
         get() = sheetSpec()
 
-    val MicroInteractionSpec: TweenSpec<Float>
+    val MicroInteractionSpec: FiniteAnimationSpec<Float>
         @Composable
         get() = microSpec()
 
     @Composable
-    fun <T> screenSpec(): TweenSpec<T> = if (LocalAnimationsEnabled.current) {
-        tween(durationMillis = 220, easing = FastOutSlowInEasing)
+    fun <T> screenSpec(): FiniteAnimationSpec<T> = if (LocalAnimationsEnabled.current) {
+        tween(durationMillis = 200, easing = FastOutSlowInEasing)
     } else {
-        tween(durationMillis = 0)
+        snap()
     }
 
     @Composable
-    fun <T> sheetSpec(): TweenSpec<T> = if (LocalAnimationsEnabled.current) {
-        tween(durationMillis = 180, easing = LinearEasing)
+    fun <T> sheetSpec(): FiniteAnimationSpec<T> = if (LocalAnimationsEnabled.current) {
+        spring(
+            dampingRatio = 0.85f,
+            stiffness = Spring.StiffnessMedium
+        )
     } else {
-        tween(durationMillis = 0)
+        snap()
     }
 
     @Composable
-    fun <T> microSpec(): TweenSpec<T> = if (LocalAnimationsEnabled.current) {
-        tween(durationMillis = 120, easing = LinearEasing)
+    fun <T> microSpec(): FiniteAnimationSpec<T> = if (LocalAnimationsEnabled.current) {
+        tween(durationMillis = 150, easing = FastOutSlowInEasing)
     } else {
-        tween(durationMillis = 0)
+        snap()
     }
+
+    @Composable
+    fun <T> pressSpring(): FiniteAnimationSpec<T> = if (LocalAnimationsEnabled.current) {
+        spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        )
+    } else {
+        snap()
+    }
+}
+
+/**
+ * Modificador optimizado para feedback de toque mediante escala gráfica (sin recomposición de layout).
+ */
+@Composable
+fun Modifier.bounceClick(
+    enabled: Boolean = true,
+    pressedScale: Float = 0.95f,
+    onClick: () -> Unit
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) pressedScale else 1.0f,
+        animationSpec = MotokoAnimation.pressSpring(),
+        label = "bounceClickScale"
+    )
+
+    return this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled,
+            onClick = onClick
+        )
 }
 
 private val DarkColorScheme = darkColorScheme(
